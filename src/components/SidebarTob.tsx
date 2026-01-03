@@ -7,38 +7,52 @@ export default function SidebarTob() {
         </h2>
         
         <a
-          href="#usage-video"
+          href="/toB"
+          className="block px-4 py-2 text-sm font-medium text-gray-700 rounded-md hover:bg-gray-100 transition-colors"
+        >
+          ホーム
+        </a>
+        
+        <a
+          href="/toB/accounts"
+          className="block px-4 py-2 text-sm font-medium text-gray-700 rounded-md hover:bg-gray-100 transition-colors"
+        >
+          アカウント一覧
+        </a>
+        
+        <a
+          href="/toB/usage-video"
           className="block px-4 py-2 text-sm font-medium text-gray-700 rounded-md hover:bg-gray-100 transition-colors"
         >
           使い方動画
         </a>
         
         <a
-          href="#sales-materials"
+          href="/toB/sales-materials"
           className="block px-4 py-2 text-sm font-medium text-gray-700 rounded-md hover:bg-gray-100 transition-colors"
         >
           営業資料
         </a>
         
         <a
-          href="#support"
+          href="/toB/support"
           className="block px-4 py-2 text-sm font-medium text-gray-700 rounded-md hover:bg-gray-100 transition-colors"
         >
           サポート
         </a>
         
         <a
-          href="#case-studies"
+          href="/toB/case-studies"
           className="block px-4 py-2 text-sm font-medium text-gray-700 rounded-md hover:bg-gray-100 transition-colors"
         >
           成功事例・失敗事例
         </a>
         
         <a
-          href="#invoice"
+          href="/toB/invoice"
           className="block px-4 py-2 text-sm font-medium text-gray-700 rounded-md hover:bg-gray-100 transition-colors"
         >
-          請求書関係
+          請求書
         </a>
       </nav>
     </aside>

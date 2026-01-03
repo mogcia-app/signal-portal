@@ -44,8 +44,8 @@ export default function Home() {
             <div className="w-full h-96 bg-gray-300 rounded-lg flex items-center justify-center">
               <p className="text-gray-500">
                 概要説明動画（後から埋め込み予定・3分以内・1本完結）
-              </p>
-            </div>
+          </p>
+        </div>
           </div>
 
           {/* ② 「次にやること」チェックリスト */}
@@ -81,8 +81,8 @@ export default function Home() {
                   </span>
                   <a
                     href={item.link}
-                    target="_blank"
-                    rel="noopener noreferrer"
+            target="_blank"
+            rel="noopener noreferrer"
                     className="text-xs text-orange-600 hover:text-orange-700 opacity-0 group-hover:opacity-100 transition-opacity"
                     onClick={(e) => e.stopPropagation()}
                   >
@@ -131,11 +131,11 @@ export default function Home() {
                 className="block text-sm text-gray-700 hover:text-orange-600 transition-colors"
               >
                 • お問い合わせ
-              </a>
-              <a
+          </a>
+          <a
                 href="/usage-video"
                 className="block text-sm text-gray-700 hover:text-orange-600 transition-colors"
-              >
+          >
                 • 使い方動画一覧
               </a>
             </div>

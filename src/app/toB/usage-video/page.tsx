@@ -1,4 +1,4 @@
-import SidebarToc from "@/components/SidebarToc";
+import SidebarTob from "@/components/SidebarTob";
 import FloatingQnA from "@/components/FloatingQnA";
 
 const videoSections = [
@@ -11,11 +11,11 @@ const videoSections = [
   { id: 7, title: "KPI" },
 ];
 
-export default function UsageVideoPage() {
+export default function ToBUsageVideoPage() {
   return (
     <div className="flex min-h-screen bg-gray-50">
-      {/* toC専用サイドバー */}
-      <SidebarToc />
+      {/* toB専用サイドバー */}
+      <SidebarTob />
 
       {/* メインコンテンツエリア */}
       <main className="flex-1 p-8">
@@ -49,5 +49,4 @@ export default function UsageVideoPage() {
     </div>
   );
 }
-
 
