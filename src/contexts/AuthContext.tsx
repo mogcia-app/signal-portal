@@ -258,7 +258,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       contractStartDate: new Date().toISOString(),
       contractEndDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(), // 1年後
       billingInfo: {
-        plan: 'light', // デフォルトはライトプラン
+        plan: 'basic', // デフォルトはベーシックプラン（lightの代わり）
         monthlyFee: 15000,
         currency: 'JPY',
         paymentMethod: 'credit_card',
