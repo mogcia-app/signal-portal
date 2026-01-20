@@ -22,6 +22,7 @@ interface AuthContextType {
     email: string,
     password: string,
     additionalData: {
+      name?: string;
       companyName?: string;
       representativeName?: string;
       phone?: string;
@@ -90,30 +91,81 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // ログイン成功時にセッション開始時刻を保存
         saveSessionStartTime();
 
-        // Firestoreからユーザープロフィールを取得
-        const userDocRef = doc(db, "users", firebaseUser.uid);
-        const userDoc = await getDoc(userDocRef);
+        try {
+          // Firestoreからユーザープロフィールを取得
+          const userDocRef = doc(db, "users", firebaseUser.uid);
+          const userDoc = await getDoc(userDocRef);
 
-        if (userDoc.exists()) {
-          setUserProfile({
-            id: userDoc.id,
-            ...userDoc.data(),
-          } as UserProfile);
-        } else {
-          // プロフィールが存在しない場合は作成
-          const newProfile: UserProfile = {
-            id: firebaseUser.uid,
-            email: firebaseUser.email || undefined,
-            name: firebaseUser.displayName || undefined,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          };
-          await setDoc(userDocRef, {
-            ...newProfile,
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
-          });
-          setUserProfile(newProfile);
+          if (userDoc.exists()) {
+            const userData = userDoc.data() as UserProfile;
+            
+            // signalToolAccessUrlが存在しない場合は生成して保存
+            if (!userData.signalToolAccessUrl) {
+              const signalToolBaseUrl = process.env.NEXT_PUBLIC_SIGNAL_TOOL_BASE_URL || 'https://signaltool.app';
+              const signalToolAccessUrl = `${signalToolBaseUrl}/auth/callback?userId=${firebaseUser.uid}`;
+              
+              try {
+                await setDoc(userDocRef, {
+                  ...userData,
+                  signalToolAccessUrl,
+                  updatedAt: serverTimestamp(),
+                }, { merge: true });
+              } catch (error) {
+                // オフライン時など、setDocが失敗してもプロフィールは設定する
+                console.warn("Failed to update signalToolAccessUrl (possibly offline):", error);
+              }
+              
+              setUserProfile({
+                ...userData,
+                signalToolAccessUrl,
+              } as UserProfile);
+            } else {
+              setUserProfile({
+                id: userDoc.id,
+                ...userData,
+              } as UserProfile);
+            }
+          } else {
+            // プロフィールが存在しない場合は作成
+            const newProfile: UserProfile = {
+              id: firebaseUser.uid,
+              email: firebaseUser.email || undefined,
+              name: firebaseUser.displayName || undefined,
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            };
+            try {
+              await setDoc(userDocRef, {
+                ...newProfile,
+                createdAt: serverTimestamp(),
+                updatedAt: serverTimestamp(),
+              });
+            } catch (error) {
+              // オフライン時など、setDocが失敗してもプロフィールは設定する
+              console.warn("Failed to create user profile (possibly offline):", error);
+            }
+            setUserProfile(newProfile);
+          }
+        } catch (error: any) {
+          // オフライン時やネットワークエラー時の処理
+          if (error?.code === 'unavailable' || error?.message?.includes('offline')) {
+            console.warn("Firestore is offline. Using cached data or minimal profile.");
+            // オフライン時は最小限のプロフィールを設定
+            setUserProfile({
+              id: firebaseUser.uid,
+              email: firebaseUser.email || undefined,
+              name: firebaseUser.displayName || undefined,
+            } as UserProfile);
+          } else {
+            // その他のエラーはログに記録
+            console.error("Error fetching user profile:", error);
+            // エラーが発生しても最小限のプロフィールを設定
+            setUserProfile({
+              id: firebaseUser.uid,
+              email: firebaseUser.email || undefined,
+              name: firebaseUser.displayName || undefined,
+            } as UserProfile);
+          }
         }
       } else {
         setUserProfile(null);
@@ -153,6 +205,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     email: string,
     password: string,
     additionalData: {
+      name?: string;
       companyName?: string;
       representativeName?: string;
       phone?: string;
@@ -165,25 +218,79 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       password
     );
 
+    const uid = userCredential.user.uid;
+
+    // Signal.ツールへのアクセスURLを生成
+    const signalToolBaseUrl = process.env.NEXT_PUBLIC_SIGNAL_TOOL_BASE_URL || 'https://signaltool.app';
+    const signalToolAccessUrl = `${signalToolBaseUrl}/auth/callback?userId=${uid}`;
+
     // Firestoreにユーザープロフィールを保存
-    const userDocRef = doc(db, "users", userCredential.user.uid);
+    const userDocRef = doc(db, "users", uid);
     const userProfile: UserProfile = {
-      id: userCredential.user.uid,
+      id: uid,
       email: userCredential.user.email || undefined,
-      name: additionalData.representativeName || undefined,
+      name: additionalData.name || additionalData.representativeName || undefined,
       companyName: additionalData.companyName,
       representativeName: additionalData.representativeName,
       phone: additionalData.phone,
       userType: additionalData.userType,
+      role: 'user',
+      isActive: true,
+      status: 'active',
+      snsCount: 1,
+      usageType: 'solo',
+      contractType: 'annual',
+      contractSNS: [],
+      snsAISettings: {},
+      businessInfo: {
+        industry: '',
+        companySize: 'individual',
+        businessType: 'b2c',
+        description: '',
+        snsMainGoals: [],
+        brandMission: '',
+        targetCustomer: '',
+        uniqueValue: '',
+        brandVoice: '',
+        kpiTargets: [],
+        challenges: []
+      },
+      contractStartDate: new Date().toISOString(),
+      contractEndDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(), // 1年後
+      billingInfo: {
+        plan: 'light', // デフォルトはライトプラン
+        monthlyFee: 15000,
+        currency: 'JPY',
+        paymentMethod: 'credit_card',
+        nextBillingDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+        paymentStatus: 'pending',
+        requiresStripeSetup: true
+      },
+      planTier: 'ume', // デフォルトはライトプラン（後方互換性のためumeを保持）
+      signalToolAccessUrl,
+      // 支払い確認・アクセス制御フラグ（初期値はfalse）
+      initialPaymentConfirmed: false,
+      firstMonthPaymentConfirmed: false,
+      accessGranted: false, // Admin側で支払い確認後にtrueに設定される
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
 
-    await setDoc(userDocRef, {
-      ...userProfile,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    });
+    try {
+      await setDoc(userDocRef, {
+        ...userProfile,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+    } catch (error: any) {
+      // オフライン時やネットワークエラー時の処理
+      if (error?.code === 'unavailable' || error?.message?.includes('offline')) {
+        console.warn("Firestore is offline. User profile will be saved when connection is restored.");
+      } else {
+        console.error("Error saving user profile:", error);
+      }
+      // エラーが発生してもプロフィールは設定する（オフラインモードで後で同期される）
+    }
 
     setUserProfile(userProfile);
     // 新規登録成功時にもセッション開始時刻を保存
