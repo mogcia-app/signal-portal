@@ -1,11 +1,17 @@
+"use client";
+
 import SidebarTob from "@/components/SidebarTob";
 import FloatingQnA from "@/components/FloatingQnA";
+import AuthGuard from "@/components/AuthGuard";
+import { useUserProfile } from "@/hooks/useUserProfile";
 
 export default function ToBHomePage() {
+  const { userProfile } = useUserProfile();
   return (
-    <div className="flex min-h-screen bg-gray-50">
-      {/* toB専用サイドバー */}
-      <SidebarTob />
+    <AuthGuard requireAuth requireUserType="toB">
+      <div className="flex min-h-screen bg-gray-50">
+        {/* toB専用サイドバー */}
+        <SidebarTob />
 
       {/* メインコンテンツエリア */}
       <main className="flex-1 p-8">
@@ -13,6 +19,44 @@ export default function ToBHomePage() {
           <h1 className="text-2xl font-bold text-gray-900 mb-8">
             ホーム
           </h1>
+
+          {/* Signal.ツールへのアクセスボタン */}
+          {userProfile?.signalToolAccessUrl && (
+            <div className="mb-8 p-4 bg-orange-50 border border-orange-200 rounded-lg">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold mb-1 text-gray-900">
+                    Signal.ツールにアクセス
+                  </h2>
+                  <p className="text-sm text-gray-600">
+                    SNS投稿作成や分析機能を使用できます
+                  </p>
+                </div>
+                <button
+                  onClick={() => {
+                    // URLにアクセス（Signal.ツール側で認証処理が行われる）
+                    window.open(userProfile.signalToolAccessUrl, '_blank');
+                  }}
+                  className="flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors text-sm font-medium"
+                >
+                  <svg
+                    className="w-4 h-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+                    />
+                  </svg>
+                  Signal.ツールを開く
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* 運営からのお知らせ */}
           <div className="bg-white rounded-lg border border-gray-200 p-6 mb-8">
@@ -114,9 +158,10 @@ export default function ToBHomePage() {
         </div>
       </main>
 
-      {/* 右下フローティングQ&A */}
-      <FloatingQnA />
-    </div>
+        {/* 右下フローティングQ&A */}
+        <FloatingQnA />
+      </div>
+    </AuthGuard>
   );
 }
 

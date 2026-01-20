@@ -3,6 +3,7 @@
 import { useState } from "react";
 import SidebarTob from "@/components/SidebarTob";
 import FloatingQnA from "@/components/FloatingQnA";
+import AuthGuard from "@/components/AuthGuard";
 
 const mockInvoices = [
   {
@@ -38,8 +39,9 @@ export default function InvoicePage() {
   const [selectedYear, setSelectedYear] = useState("2026");
 
   return (
-    <div className="flex min-h-screen bg-gray-50">
-      <SidebarTob />
+    <AuthGuard requireAuth requireUserType="toB">
+      <div className="flex min-h-screen bg-gray-50">
+        <SidebarTob />
 
       <main className="flex-1 p-8">
         <div className="max-w-5xl mx-auto">
@@ -194,8 +196,9 @@ export default function InvoicePage() {
         </div>
       </main>
 
-      <FloatingQnA />
-    </div>
+        <FloatingQnA />
+      </div>
+    </AuthGuard>
   );
 }
 

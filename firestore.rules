@@ -2,16 +2,54 @@ rules_version='2'
 
 service cloud.firestore {
   match /databases/{database}/documents {
+    // 認証済みユーザーチェック関数
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // 通知（読み取りのみ）
+    match /notifications/{notificationId} {
+      // 認証済みユーザーで、公開中の通知のみ読み取り可能
+      allow read: if isAuthenticated() && 
+                       resource.data.status == 'published';
+      // 管理者のみ書き込み可能（必要に応じて実装）
+      // 現時点では書き込みを禁止（Adminプロジェクトから管理）
+      allow write: if false;
+    }
+
+    // ブログ投稿（読み取りのみ）
+    match /blogPosts/{postId} {
+      // 認証済みユーザーで、公開中の投稿のみ読み取り可能
+      allow read: if isAuthenticated() && 
+                       resource.data.status == 'published';
+      // 管理者のみ書き込み可能（必要に応じて実装）
+      // 現時点では書き込みを禁止（Adminプロジェクトから管理）
+      allow write: if false;
+    }
+
+    // ユーザー自身のデータ更新
+    match /users/{userId} {
+      // 自分自身のデータ更新を許可
+      // 重要なフィールド（id、email、createdAt、userType）は変更不可
+      allow update: if isAuthenticated() &&
+                         request.auth.uid == userId &&
+                         // id、email、createdAt、userType が変更されていないことを確認
+                         request.resource.data.id == resource.data.id &&
+                         request.resource.data.email == resource.data.email &&
+                         request.resource.data.createdAt == resource.data.createdAt &&
+                         (!resource.data.exists('userType') || 
+                          request.resource.data.userType == resource.data.userType);
+      
+      // 自分自身のデータのみ読み取り可能
+      allow read: if isAuthenticated() && request.auth.uid == userId;
+      
+      // 作成はAuthContextで行う（認証済みユーザーのみ）
+      allow create: if isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // その他のコレクション（一時的な開発用ルール）
+    // TODO: 適切なセキュリティルールを実装してください
     match /{document=**} {
-      // This rule allows anyone with your database reference to view, edit,
-      // and delete all data in your database. It is useful for getting
-      // started, but it is configured to expire after 30 days because it
-      // leaves your app open to attackers. At that time, all client
-      // requests to your database will be denied.
-      //
-      // Make sure to write security rules for your app before that time, or
-      // else all client requests to your database will be denied until you
-      // update your rules.
       allow read, write: if request.time < timestamp.date(2026, 2, 2);
     }
   }

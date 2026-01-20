@@ -1,5 +1,8 @@
+"use client";
+
 import SidebarToc from "@/components/SidebarToc";
 import FloatingQnA from "@/components/FloatingQnA";
+import AuthGuard from "@/components/AuthGuard";
 
 const videoSections = [
   { id: 1, title: "Signal.概要" },
@@ -13,9 +16,10 @@ const videoSections = [
 
 export default function UsageVideoPage() {
   return (
-    <div className="flex min-h-screen bg-gray-50">
-      {/* toC専用サイドバー */}
-      <SidebarToc />
+    <AuthGuard requireAuth requireUserType="toC">
+      <div className="flex min-h-screen bg-gray-50">
+        {/* toC専用サイドバー */}
+        <SidebarToc />
 
       {/* メインコンテンツエリア */}
       <main className="flex-1 p-8">
@@ -44,10 +48,13 @@ export default function UsageVideoPage() {
         </div>
       </main>
 
-      {/* 右下フローティングQ&A */}
-      <FloatingQnA />
-    </div>
+        {/* 右下フローティングQ&A */}
+        <FloatingQnA />
+      </div>
+    </AuthGuard>
   );
 }
+
+
 
 

@@ -1,5 +1,8 @@
+"use client";
+
 import SidebarTob from "@/components/SidebarTob";
 import FloatingQnA from "@/components/FloatingQnA";
+import AuthGuard from "@/components/AuthGuard";
 
 const materials = [
   { id: 1, title: "Signal.サービス概要資料" },
@@ -11,9 +14,10 @@ const materials = [
 
 export default function SalesMaterialsPage() {
   return (
-    <div className="flex min-h-screen bg-gray-50">
-      {/* toB専用サイドバー */}
-      <SidebarTob />
+    <AuthGuard requireAuth requireUserType="toB">
+      <div className="flex min-h-screen bg-gray-50">
+        {/* toB専用サイドバー */}
+        <SidebarTob />
 
       {/* メインコンテンツエリア */}
       <main className="flex-1 p-8">
@@ -63,9 +67,12 @@ export default function SalesMaterialsPage() {
         </div>
       </main>
 
-      {/* 右下フローティングQ&A */}
-      <FloatingQnA />
-    </div>
+        {/* 右下フローティングQ&A */}
+        <FloatingQnA />
+      </div>
+    </AuthGuard>
   );
 }
+
+
 

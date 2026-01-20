@@ -3,6 +3,7 @@
 import { useState } from "react";
 import SidebarTob from "@/components/SidebarTob";
 import FloatingQnA from "@/components/FloatingQnA";
+import AuthGuard from "@/components/AuthGuard";
 
 const mockAccounts = [
   {
@@ -78,7 +79,8 @@ export default function AccountsPage() {
   };
 
   return (
-    <div className="flex min-h-screen bg-gray-50">
+    <AuthGuard requireAuth requireUserType="toB">
+      <div className="flex min-h-screen bg-gray-50">
       <SidebarTob />
 
       <main className="flex-1 p-8">
@@ -297,8 +299,9 @@ export default function AccountsPage() {
         </div>
       </main>
 
-      <FloatingQnA />
-    </div>
+        <FloatingQnA />
+      </div>
+    </AuthGuard>
   );
 }
 

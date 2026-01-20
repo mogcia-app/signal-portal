@@ -3,6 +3,7 @@
 import { useState } from "react";
 import SidebarToc from "@/components/SidebarToc";
 import FloatingQnA from "@/components/FloatingQnA";
+import AuthGuard from "@/components/AuthGuard";
 
 export default function AccountPage() {
   const [formData, setFormData] = useState({
@@ -56,8 +57,9 @@ export default function AccountPage() {
   };
 
   return (
-    <div className="flex min-h-screen bg-gray-50">
-      <SidebarToc />
+    <AuthGuard requireAuth requireUserType="toC">
+      <div className="flex min-h-screen bg-gray-50">
+        <SidebarToc />
       
       <main className="flex-1 p-8">
         <div className="max-w-4xl mx-auto space-y-8">
@@ -540,9 +542,12 @@ export default function AccountPage() {
         </div>
       </main>
 
-      <FloatingQnA />
-    </div>
+        <FloatingQnA />
+      </div>
+    </AuthGuard>
   );
 }
+
+
 
 

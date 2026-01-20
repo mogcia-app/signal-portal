@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
+import AuthGuard from "@/components/AuthGuard";
 
 export default function CompletePage() {
   const router = useRouter();
@@ -9,14 +10,15 @@ export default function CompletePage() {
   useEffect(() => {
     // 3秒後にホームページにリダイレクト
     const timer = setTimeout(() => {
-      router.push("/");
+      router.push("/home");
     }, 3000);
 
     return () => clearTimeout(timer);
   }, [router]);
 
   return (
-    <div className="flex min-h-screen bg-gray-50 items-center justify-center p-4">
+    <AuthGuard requireAuth requireUserType="toC">
+      <div className="flex min-h-screen bg-gray-50 items-center justify-center p-4">
       <div className="w-full max-w-md text-center">
         <div className="bg-white rounded-lg shadow-lg p-8">
           <div className="mb-6">
@@ -44,15 +46,18 @@ export default function CompletePage() {
           </div>
 
           <button
-            onClick={() => router.push("/")}
+            onClick={() => router.push("/home")}
             className="px-6 py-2 bg-orange-600 text-white rounded-lg font-medium hover:bg-orange-700 transition-colors"
           >
             ホームページへ
           </button>
         </div>
       </div>
-    </div>
+      </div>
+    </AuthGuard>
   );
 }
+
+
 
 

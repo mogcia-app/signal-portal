@@ -3,6 +3,7 @@
 import { useState } from "react";
 import SidebarTob from "@/components/SidebarTob";
 import FloatingQnA from "@/components/FloatingQnA";
+import AuthGuard from "@/components/AuthGuard";
 
 const mockCases = [
   {
@@ -53,8 +54,9 @@ export default function CaseStudiesPage() {
       : mockCases.filter((caseItem) => caseItem.type === activeTab);
 
   return (
-    <div className="flex min-h-screen bg-gray-50">
-      <SidebarTob />
+    <AuthGuard requireAuth requireUserType="toB">
+      <div className="flex min-h-screen bg-gray-50">
+        <SidebarTob />
 
       <main className="flex-1 p-8">
         <div className="max-w-6xl mx-auto">
@@ -241,8 +243,11 @@ export default function CaseStudiesPage() {
         </div>
       </main>
 
-      <FloatingQnA />
-    </div>
+        <FloatingQnA />
+      </div>
+    </AuthGuard>
   );
 }
+
+
 

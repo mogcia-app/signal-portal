@@ -2,6 +2,10 @@
 
 import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { doc, updateDoc, serverTimestamp } from "firebase/firestore";
+import { db } from "@/lib/firebase";
+import AuthGuard from "@/components/AuthGuard";
+import { useAuth } from "@/contexts/AuthContext";
 
 const plans: { [key: string]: { name: string; price: number } } = {
   light: { name: "ライト", price: 15000 },
@@ -12,7 +16,10 @@ const plans: { [key: string]: { name: string; price: number } } = {
 function PaymentContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const planId = searchParams.get("plan") || "standard";
+  const { userProfile } = useAuth();
+  const planIdFromUrl = searchParams.get("plan");
+  // プランIDの優先順位: URLパラメータ > ユーザープロフィールのselectedPlanId > デフォルト
+  const planId = planIdFromUrl || userProfile?.selectedPlanId || "standard";
   const selectedPlan = plans[planId] || plans.standard;
 
   const [paymentData, setPaymentData] = useState({
@@ -26,15 +33,35 @@ function PaymentContent() {
     setPaymentData(prev => ({ ...prev, [field]: value }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // 決済完了時にプラン情報をFirestoreに保存
+    if (userProfile?.id && planId) {
+      try {
+        const userDocRef = doc(db, "users", userProfile.id);
+        await updateDoc(userDocRef, {
+          selectedPlanId: planId,
+          "billingInfo.plan": planId, // billingInfoにも保存（後方互換性のため）
+          "billingInfo.monthlyFee": selectedPlan.price,
+          "billingInfo.currency": "JPY",
+          "billingInfo.paymentMethod": "credit_card",
+          updatedAt: serverTimestamp(),
+        });
+      } catch (error) {
+        console.error("Failed to save payment information:", error);
+        // エラーが発生しても進む
+      }
+    }
+    
     // デモ：決済完了
     router.push("/complete");
   };
 
   return (
-    <div className="flex min-h-screen bg-gray-50 items-center justify-center p-4">
-      <div className="w-full max-w-3xl">
+    <AuthGuard requireAuth requireUserType="toC">
+      <div className="flex min-h-screen bg-gray-50 items-center justify-center p-4">
+        <div className="w-full max-w-3xl">
         <div className="text-center mb-8">
           <h1 className="text-2xl font-bold text-gray-900 mb-2">
             クレジットカード決済
@@ -152,8 +179,9 @@ function PaymentContent() {
             </div>
           </div>
         </form>
-      </div>
-    </div>
+          </div>
+        </div>
+      </AuthGuard>
   );
 }
 

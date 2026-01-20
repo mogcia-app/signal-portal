@@ -1,0 +1,119 @@
+"use client";
+
+import { useEffect } from "react";
+import { useRouter, usePathname } from "next/navigation";
+import { useAuth } from "@/contexts/AuthContext";
+
+interface AuthGuardProps {
+  children: React.ReactNode;
+  requireAuth?: boolean;
+  requireUserType?: "toC" | "toB";
+}
+
+export default function AuthGuard({
+  children,
+  requireAuth = true,
+  requireUserType,
+}: AuthGuardProps) {
+  const { user, userProfile, loading, isSessionExpired, logout } = useAuth();
+  const router = useRouter();
+  const pathname = usePathname();
+
+  useEffect(() => {
+    if (loading) return;
+
+    if (requireAuth) {
+      // セッションタイムアウトチェック
+      if (user && isSessionExpired()) {
+        logout();
+        if (pathname?.startsWith("/toB")) {
+          router.push("/toB/login");
+        } else {
+          router.push("/");
+        }
+        return;
+      }
+
+      // 認証が必要だが、ユーザーがログインしていない場合
+      if (!user) {
+        // toBページの場合はtoB/loginへ、それ以外はルート（ログインページ）へ
+        if (pathname?.startsWith("/toB")) {
+          router.push("/toB/login");
+        } else {
+          router.push("/");
+        }
+        return;
+      }
+
+      // userProfileがまだ読み込まれていない場合は何もしない（待つ）
+      if (userProfile === null) {
+        return;
+      }
+
+      // ユーザータイプのチェック（userProfileが存在する場合のみ）
+      if (requireUserType && userProfile && userProfile.userType !== requireUserType) {
+        // ユーザータイプが一致しない場合は適切なページへリダイレクト
+        // ただし、既にそのページにいる場合はリダイレクトしない（無限ループ防止）
+        if (requireUserType === "toC" && pathname !== "/home") {
+          router.push("/home");
+        } else if (requireUserType === "toB" && !pathname?.startsWith("/toB")) {
+          router.push("/toB");
+        }
+        return;
+      }
+
+      // toCページにtoBユーザーがアクセスしようとした場合
+      if (
+        !pathname?.startsWith("/toB") &&
+        userProfile &&
+        userProfile.userType === "toB"
+      ) {
+        router.push("/toB");
+        return;
+      }
+
+      // toBページにtoCユーザーがアクセスしようとした場合
+      if (pathname?.startsWith("/toB") && userProfile && userProfile.userType === "toC") {
+        router.push("/home");
+        return;
+      }
+    }
+  }, [user, userProfile, loading, requireAuth, requireUserType, router, pathname, isSessionExpired, logout]);
+
+  // ローディング中
+  if (loading) {
+    return (
+      <div className="flex min-h-screen bg-gray-50 items-center justify-center">
+        <div className="text-center">
+          <p className="text-gray-600">読み込み中...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // 認証が必要な場合、ユーザーがログインしていない場合は何も表示しない
+  if (requireAuth && !user) {
+    return null;
+  }
+
+  // ユーザータイプチェック（userProfileがまだ読み込まれていない場合は待つ）
+  if (requireUserType && userProfile === null && user) {
+    // ユーザーは認証されているが、userProfileがまだ読み込まれていない
+    return (
+      <div className="flex min-h-screen bg-gray-50 items-center justify-center">
+        <div className="text-center">
+          <p className="text-gray-600">ユーザー情報を読み込み中...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // ユーザータイプチェック（userProfileが読み込まれた後、タイプが一致しない場合）
+  // userProfileが存在し、userTypeが設定されていて、それが一致しない場合のみブロック
+  if (requireUserType && userProfile && userProfile.userType && userProfile.userType !== requireUserType) {
+    return null;
+  }
+
+  return <>{children}</>;
+}
+

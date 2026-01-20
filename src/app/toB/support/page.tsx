@@ -1,9 +1,13 @@
+"use client";
+
 import SidebarTob from "@/components/SidebarTob";
 import FloatingQnA from "@/components/FloatingQnA";
+import AuthGuard from "@/components/AuthGuard";
 
 export default function ToBSupportPage() {
   return (
-    <div className="flex min-h-screen bg-gray-50">
+    <AuthGuard requireAuth requireUserType="toB">
+      <div className="flex min-h-screen bg-gray-50">
       {/* toB専用サイドバー */}
       <SidebarTob />
 
@@ -67,9 +71,12 @@ export default function ToBSupportPage() {
         </div>
       </main>
 
-      {/* 右下フローティングQ&A */}
-      <FloatingQnA />
-    </div>
+        {/* 右下フローティングQ&A */}
+        <FloatingQnA />
+      </div>
+    </AuthGuard>
   );
 }
+
+
 

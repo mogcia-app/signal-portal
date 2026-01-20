@@ -2,6 +2,10 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { doc, updateDoc, getDoc, serverTimestamp } from "firebase/firestore";
+import { db } from "@/lib/firebase";
+import AuthGuard from "@/components/AuthGuard";
+import { useAuth } from "@/contexts/AuthContext";
 
 const plans = [
   {
@@ -26,16 +30,46 @@ const plans = [
 
 export default function PlanSelectionPage() {
   const router = useRouter();
+  const { userProfile } = useAuth();
   const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
 
-  const handleNext = () => {
-    if (selectedPlan) {
-      router.push(`/payment?plan=${selectedPlan}`);
+  const handleNext = async () => {
+    if (selectedPlan && userProfile?.id) {
+      try {
+        // Firestoreに選択したプランIDを保存
+        const userDocRef = doc(db, "users", userProfile.id);
+        await updateDoc(userDocRef, {
+          selectedPlanId: selectedPlan,
+          updatedAt: serverTimestamp(),
+        });
+
+        // 契約データを取得して支払方法を確認
+        const userDoc = await getDoc(userDocRef);
+        
+        if (userDoc.exists()) {
+          const data = userDoc.data();
+          const contractData = data.contractData;
+          
+          // 請求書発行を選択している場合は請求書ページへ、Stripe決済の場合は決済ページへ
+          if (contractData?.paymentMethods?.includes("請求書発行")) {
+            router.push(`/initial-invoice?plan=${selectedPlan}`);
+          } else {
+            router.push(`/payment?plan=${selectedPlan}`);
+          }
+        } else {
+          router.push(`/payment?plan=${selectedPlan}`);
+        }
+      } catch (error) {
+        console.error("Failed to save plan selection:", error);
+        // エラーが発生しても進む
+        router.push(`/payment?plan=${selectedPlan}`);
+      }
     }
   };
 
   return (
-    <div className="flex min-h-screen bg-gray-50 items-center justify-center p-4">
+    <AuthGuard requireAuth requireUserType="toC">
+      <div className="flex min-h-screen bg-gray-50 items-center justify-center p-4">
       <div className="w-full max-w-5xl">
         <div className="text-center mb-8">
           <h1 className="text-2xl font-bold text-gray-900 mb-2">
@@ -114,8 +148,11 @@ export default function PlanSelectionPage() {
           </button>
         </div>
       </div>
-    </div>
+      </div>
+    </AuthGuard>
   );
 }
+
+
 
 
