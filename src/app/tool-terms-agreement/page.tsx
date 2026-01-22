@@ -96,8 +96,8 @@ export default function ToolTermsAgreementPage() {
 
             // 支払方法に応じてリダイレクト
             if (paymentMethods.includes("請求書発行")) {
-              // 請求書発行を選択している場合は請求書ページへ（プラン選択は不要）
-              router.push("/initial-invoice");
+              // 請求書発行を選択している場合はホームページへ（プラン選択は不要）
+              router.push("/home");
             } else if (paymentMethods.includes("Stripe決済")) {
               // Stripe決済のみの場合はプラン選択へ
               router.push("/plan-selection");
