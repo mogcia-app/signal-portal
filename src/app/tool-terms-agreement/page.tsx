@@ -1,13 +1,85 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { doc, getDoc, updateDoc, serverTimestamp } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 import AuthGuard from "@/components/AuthGuard";
+import { useAuth } from "@/contexts/AuthContext";
 
 export default function ToolTermsAgreementPage() {
   const router = useRouter();
+  const { userProfile } = useAuth();
   const [agreed, setAgreed] = useState(false);
+  const [isAgreedPersisted, setIsAgreedPersisted] = useState(false);
+  const [agreedDate, setAgreedDate] = useState<string>("");
+  const [loading, setLoading] = useState(true);
+
+  // ページ読み込み時にFirestoreから同意状態を確認
+  useEffect(() => {
+    const loadAgreementStatus = async () => {
+      if (!userProfile?.id) {
+        setLoading(false);
+        return;
+      }
+
+      try {
+        const userDocRef = doc(db, "users", userProfile.id);
+        const userDoc = await getDoc(userDocRef);
+
+        if (userDoc.exists()) {
+          const data = userDoc.data();
+          const toolTermsAgreed = data.toolTermsAgreed;
+          const toolTermsAgreedDate = data.toolTermsAgreedDate;
+
+          if (toolTermsAgreed === true) {
+            setAgreed(true);
+            setIsAgreedPersisted(true);
+            if (toolTermsAgreedDate) {
+              setAgreedDate(toolTermsAgreedDate);
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Failed to load agreement status:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadAgreementStatus();
+  }, [userProfile]);
+
+  const handleAgreementChange = async (checked: boolean) => {
+    // 既に保存済みの場合は変更不可
+    if (isAgreedPersisted && !checked) {
+      return;
+    }
+
+    setAgreed(checked);
+    
+    if (checked && userProfile?.id) {
+      try {
+        // 同意したらFirestoreに保存（日付も保存）
+        const now = new Date();
+        const dateString = `${now.getFullYear()}年${now.getMonth() + 1}月${now.getDate()}日`;
+        
+        const userDocRef = doc(db, "users", userProfile.id);
+        await updateDoc(userDocRef, {
+          toolTermsAgreed: true,
+          toolTermsAgreedDate: dateString,
+          updatedAt: serverTimestamp(),
+        });
+
+        setIsAgreedPersisted(true);
+        setAgreedDate(dateString);
+      } catch (error) {
+        console.error("Failed to save agreement status:", error);
+        alert("同意状態の保存に失敗しました");
+      }
+    }
+  };
 
   const handleNext = () => {
     if (agreed) {
@@ -30,6 +102,16 @@ export default function ToolTermsAgreementPage() {
       }
     }
   };
+
+  if (loading) {
+    return (
+      <AuthGuard requireAuth>
+        <div className="flex min-h-screen bg-gray-50 items-center justify-center p-4">
+          <div className="text-gray-600">読み込み中...</div>
+        </div>
+      </AuthGuard>
+    );
+  }
 
   return (
     <AuthGuard requireAuth>
@@ -197,11 +279,24 @@ export default function ToolTermsAgreementPage() {
               type="checkbox"
               id="toolAgree"
               checked={agreed}
-              onChange={(e) => setAgreed(e.target.checked)}
-              className="mt-1 w-5 h-5 text-orange-600 border-gray-300 rounded focus:ring-orange-500"
+              onChange={(e) => handleAgreementChange(e.target.checked)}
+              disabled={isAgreedPersisted}
+              className={`mt-1 w-5 h-5 text-orange-600 border-gray-300 rounded focus:ring-orange-500 ${
+                isAgreedPersisted ? "opacity-60 cursor-not-allowed" : ""
+              }`}
             />
-            <label htmlFor="toolAgree" className="text-sm text-gray-700 cursor-pointer">
+            <label 
+              htmlFor="toolAgree" 
+              className={`text-sm text-gray-700 ${
+                isAgreedPersisted ? "cursor-default" : "cursor-pointer"
+              }`}
+            >
               Signal.ツール利用規約に同意します
+              {isAgreedPersisted && agreedDate && (
+                <span className="ml-2 text-xs text-gray-500">
+                  （同意日: {agreedDate}）
+                </span>
+              )}
             </label>
           </div>
         </div>
