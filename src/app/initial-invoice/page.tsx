@@ -92,9 +92,10 @@ function InitialInvoiceContent() {
             });
             
             // 入金期日が保存されていれば設定
-            if (savedContractData.confirmedDueDate) {
-              setConfirmedDueDate(savedContractData.confirmedDueDate);
-              setSelectedDueDate(savedContractData.confirmedDueDate);
+            const savedDueDate = savedContractData.confirmedDueDate || data.contractData?.confirmedDueDate;
+            if (savedDueDate) {
+              setConfirmedDueDate(savedDueDate);
+              setSelectedDueDate(savedDueDate);
             }
           }
 
@@ -184,11 +185,21 @@ function InitialInvoiceContent() {
             });
           }
           setInvoiceNumber(savedInvoiceNumber);
-        }
 
-        // 請求日を設定
-        const today = new Date();
-        setInvoiceDate(`${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`);
+          // 請求日を取得（保存されていれば使用、なければ今日の日付）
+          const savedInvoiceDate = data.invoiceDate || data.contractData?.invoiceDate;
+          if (savedInvoiceDate) {
+            setInvoiceDate(savedInvoiceDate);
+          } else {
+            // 保存されていない場合のみ今日の日付を設定
+            const today = new Date();
+            setInvoiceDate(`${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`);
+          }
+        } else {
+          // ユーザードキュメントが存在しない場合、今日の日付を設定
+          const today = new Date();
+          setInvoiceDate(`${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`);
+        }
       } catch (error) {
         console.error("Failed to load contract data from Firestore:", error);
       } finally {
@@ -268,21 +279,47 @@ function InitialInvoiceContent() {
   const tax = Math.floor(subtotal * TAX_RATE);
   const total = subtotal + tax;
 
-  // 日付を確定する関数
-  const handleConfirmDueDate = async () => {
-    if (selectedDueDate && userProfile?.id) {
+  // 日付を確定する関数（確定のみ、保存は別ボタンで）
+  const handleConfirmDueDate = () => {
+    if (selectedDueDate) {
       setConfirmedDueDate(selectedDueDate);
+    }
+  };
+
+  // 請求日、入金期日、契約日を保存する関数
+  const handleSaveDates = async () => {
+    if (!userProfile?.id) return;
+
+    try {
+      const userDocRef = doc(db, "users", userProfile.id);
       
-      // Firestoreに保存
-      try {
-        const userDocRef = doc(db, "users", userProfile.id);
-        await updateDoc(userDocRef, {
-          "contractData.confirmedDueDate": selectedDueDate,
-          updatedAt: serverTimestamp(),
-        });
-      } catch (error) {
-        console.error("Failed to save confirmed due date:", error);
-      }
+      // 既存のcontractDataを取得して保持
+      const userDoc = await getDoc(userDocRef);
+      const existingData = userDoc.exists() ? userDoc.data() : {};
+      const existingContractData = existingData.contractData || {};
+      
+      // contractData全体を更新（既存のデータを保持しつつ、新しい値を設定）
+      const updateData: any = {
+        invoiceDate: invoiceDate, // トップレベルにも保存
+        "contractData": {
+          ...existingContractData,
+          ...contractData, // 既存のcontractDataを保持
+          contractDate: contractData?.contractDate || existingContractData.contractDate,
+          paymentMethods: contractData?.paymentMethods || existingContractData.paymentMethods,
+          invoicePaymentDate: contractData?.invoicePaymentDate || existingContractData.invoicePaymentDate,
+          confirmedDueDate: confirmedDueDate || existingContractData.confirmedDueDate,
+          invoiceDate: invoiceDate,
+        },
+        updatedAt: serverTimestamp(),
+      };
+
+      await updateDoc(userDocRef, updateData);
+      
+      // 成功メッセージ
+      alert("保存しました");
+    } catch (error) {
+      console.error("Failed to save dates:", error);
+      alert("保存に失敗しました");
     }
   };
 
@@ -315,8 +352,13 @@ function InitialInvoiceContent() {
                 )}
               </div>
               <div className="text-right space-y-1">
-                <p className="text-xs text-gray-500 font-light tracking-wide">請求日</p>
-                <p className="text-sm text-gray-900 font-medium">{invoiceDate}</p>
+                <p className="text-xs text-gray-500 font-light tracking-wide mb-2">請求日</p>
+                <input
+                  type="date"
+                  value={invoiceDate}
+                  onChange={(e) => setInvoiceDate(e.target.value)}
+                  className="text-sm text-gray-900 border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-1 focus:ring-gray-400"
+                />
               </div>
             </div>
 
@@ -430,6 +472,15 @@ function InitialInvoiceContent() {
                     <p className="text-xs text-gray-500 font-light tracking-wide mb-2">振込先</p>
                     <p className="text-sm text-gray-900 font-medium">佐賀銀行福岡支店 (普通) 3078446</p>
                   </div>
+                </div>
+                {/* 保存ボタン */}
+                <div className="mt-6 flex justify-end">
+                  <button
+                    onClick={handleSaveDates}
+                    className="px-6 py-2 bg-gray-900 text-white rounded hover:bg-gray-800 transition-colors text-sm font-medium"
+                  >
+                    保存
+                  </button>
                 </div>
               </div>
             )}
