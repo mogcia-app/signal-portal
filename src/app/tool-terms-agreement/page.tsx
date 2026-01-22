@@ -81,23 +81,41 @@ export default function ToolTermsAgreementPage() {
     }
   };
 
-  const handleNext = () => {
-    if (agreed) {
-      // 契約データを取得
-      if (typeof window !== "undefined") {
-        const saved = localStorage.getItem("contractData");
-        if (saved) {
-          const data = JSON.parse(saved);
-          // 請求書発行を選択している場合はプラン選択へ、Stripe決済のみの場合は請求書へ
-          if (data.paymentMethods?.includes("請求書発行")) {
-            router.push("/plan-selection");
+  const handleNext = async () => {
+    if (agreed || isAgreedPersisted) {
+      // Firestoreから契約データを取得
+      if (userProfile?.id) {
+        try {
+          const userDocRef = doc(db, "users", userProfile.id);
+          const userDoc = await getDoc(userDocRef);
+
+          if (userDoc.exists()) {
+            const data = userDoc.data();
+            const contractData = data.contractData;
+            const paymentMethods = contractData?.paymentMethods || [];
+
+            // 支払方法に応じてリダイレクト
+            if (paymentMethods.includes("請求書発行")) {
+              // 請求書発行を選択している場合は請求書ページへ（プラン選択は不要）
+              router.push("/initial-invoice");
+            } else if (paymentMethods.includes("Stripe決済")) {
+              // Stripe決済のみの場合はプラン選択へ
+              router.push("/plan-selection");
+            } else {
+              // 支払方法が設定されていない場合はプラン選択へ（デフォルト）
+              router.push("/plan-selection");
+            }
           } else {
+            // 契約データが存在しない場合はプラン選択へ
             router.push("/plan-selection");
           }
-        } else {
+        } catch (error) {
+          console.error("Failed to load contract data:", error);
+          // エラー時はプラン選択へ（デフォルト）
           router.push("/plan-selection");
         }
       } else {
+        // ユーザープロフィールがない場合はプラン選択へ
         router.push("/plan-selection");
       }
     }
