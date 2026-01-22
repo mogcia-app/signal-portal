@@ -149,9 +149,13 @@ export default function InvoicePreviewPage() {
             const tax = Math.floor(subtotal * TAX_RATE);
             const total = subtotal + tax;
 
+            // 請求日を取得（保存されていれば使用、なければ今日の日付）
+            const savedInvoiceDate = data.invoiceDate || data.contractData?.invoiceDate;
+            const invoiceDateToUse = savedInvoiceDate || new Date().toISOString().split('T')[0];
+
             setInvoiceData({
               invoiceNumber: data.invoiceNumber || "",
-              invoiceDate: new Date().toISOString().split('T')[0],
+              invoiceDate: invoiceDateToUse,
               planId,
               lineItems,
               subtotal,
