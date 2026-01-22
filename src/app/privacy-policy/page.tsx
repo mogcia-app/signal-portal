@@ -2,50 +2,99 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { doc, getDoc, updateDoc, serverTimestamp } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 import AuthGuard from "@/components/AuthGuard";
-
-const PRIVACY_POLICY_AGREED_KEY = "privacyPolicyAgreed";
-const PRIVACY_POLICY_AGREED_DATE_KEY = "privacyPolicyAgreedDate";
+import { useAuth } from "@/contexts/AuthContext";
 
 export default function PrivacyPolicyPage() {
   const router = useRouter();
+  const { userProfile } = useAuth();
   const [agreed, setAgreed] = useState(false);
   const [isAgreedPersisted, setIsAgreedPersisted] = useState(false);
   const [agreedDate, setAgreedDate] = useState<string>("");
+  const [loading, setLoading] = useState(true);
 
-  // ページ読み込み時にlocalStorageから同意状態を確認
+  // ページ読み込み時にFirestoreから同意状態を確認
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      const persisted = localStorage.getItem(PRIVACY_POLICY_AGREED_KEY);
-      const persistedDate = localStorage.getItem(PRIVACY_POLICY_AGREED_DATE_KEY);
-      if (persisted === "true") {
-        setAgreed(true);
-        setIsAgreedPersisted(true);
-        if (persistedDate) {
-          setAgreedDate(persistedDate);
-        }
+    const loadAgreementStatus = async () => {
+      if (!userProfile?.id) {
+        setLoading(false);
+        return;
       }
-    }
-  }, []);
 
-  const handleAgreementChange = (checked: boolean) => {
+      try {
+        const userDocRef = doc(db, "users", userProfile.id);
+        const userDoc = await getDoc(userDocRef);
+
+        if (userDoc.exists()) {
+          const data = userDoc.data();
+          const privacyPolicyAgreed = data.privacyPolicyAgreed;
+          const privacyPolicyAgreedDate = data.privacyPolicyAgreedDate;
+
+          if (privacyPolicyAgreed === true) {
+            setAgreed(true);
+            setIsAgreedPersisted(true);
+            if (privacyPolicyAgreedDate) {
+              setAgreedDate(privacyPolicyAgreedDate);
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Failed to load agreement status:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadAgreementStatus();
+  }, [userProfile]);
+
+  const handleAgreementChange = async (checked: boolean) => {
+    // 既に保存済みの場合は変更不可
+    if (isAgreedPersisted && !checked) {
+      return;
+    }
+
     setAgreed(checked);
-    if (checked && typeof window !== "undefined") {
-      // 同意したらlocalStorageに保存（日付も保存）
-      const now = new Date();
-      const dateString = `${now.getFullYear()}年${now.getMonth() + 1}月${now.getDate()}日`;
-      localStorage.setItem(PRIVACY_POLICY_AGREED_KEY, "true");
-      localStorage.setItem(PRIVACY_POLICY_AGREED_DATE_KEY, dateString);
-      setIsAgreedPersisted(true);
-      setAgreedDate(dateString);
+    
+    if (checked && userProfile?.id) {
+      try {
+        // 同意したらFirestoreに保存（日付も保存）
+        const now = new Date();
+        const dateString = `${now.getFullYear()}年${now.getMonth() + 1}月${now.getDate()}日`;
+        
+        const userDocRef = doc(db, "users", userProfile.id);
+        await updateDoc(userDocRef, {
+          privacyPolicyAgreed: true,
+          privacyPolicyAgreedDate: dateString,
+          updatedAt: serverTimestamp(),
+        });
+
+        setIsAgreedPersisted(true);
+        setAgreedDate(dateString);
+      } catch (error) {
+        console.error("Failed to save agreement status:", error);
+        alert("同意状態の保存に失敗しました");
+      }
     }
   };
 
   const handleNext = () => {
-    if (agreed) {
+    if (agreed || isAgreedPersisted) {
       router.push("/contract");
     }
   };
+
+  if (loading) {
+    return (
+      <AuthGuard requireAuth>
+        <div className="flex min-h-screen bg-gray-50 items-center justify-center p-4">
+          <div className="text-gray-600">読み込み中...</div>
+        </div>
+      </AuthGuard>
+    );
+  }
 
   return (
     <AuthGuard requireAuth>
@@ -239,9 +288,14 @@ export default function PrivacyPolicyPage() {
                     type="checkbox"
                     checked={agreed}
                     onChange={(e) => handleAgreementChange(e.target.checked)}
-                    className="mt-1 w-5 h-5 text-orange-600 border-gray-300 rounded focus:ring-orange-500"
+                    disabled={isAgreedPersisted}
+                    className={`mt-1 w-5 h-5 text-orange-600 border-gray-300 rounded focus:ring-orange-500 ${
+                      isAgreedPersisted ? "opacity-60 cursor-not-allowed" : ""
+                    }`}
                   />
-                  <span className="text-sm text-gray-700">
+                  <span className={`text-sm text-gray-700 ${
+                    isAgreedPersisted ? "cursor-default" : ""
+                  }`}>
                     プライバシーポリシーの内容を確認し、同意します
                   </span>
                 </label>
@@ -256,9 +310,9 @@ export default function PrivacyPolicyPage() {
                 </button>
                 <button
                   onClick={handleNext}
-                  disabled={!agreed}
+                  disabled={!agreed && !isAgreedPersisted}
                   className={`px-6 py-2 rounded-lg font-medium transition-colors ${
-                    agreed
+                    agreed || isAgreedPersisted
                       ? "bg-orange-600 text-white hover:bg-orange-700"
                       : "bg-gray-300 text-gray-500 cursor-not-allowed"
                   }`}
