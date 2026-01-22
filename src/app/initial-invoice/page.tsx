@@ -57,6 +57,7 @@ function InitialInvoiceContent() {
   const [loading, setLoading] = useState(true);
   const [selectedDueDate, setSelectedDueDate] = useState<string>("");
   const [confirmedDueDate, setConfirmedDueDate] = useState<string>("");
+  const [datesSaved, setDatesSaved] = useState<boolean>(false);
 
   useEffect(() => {
     const loadContractData = async () => {
@@ -195,6 +196,13 @@ function InitialInvoiceContent() {
             const today = new Date();
             setInvoiceDate(`${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`);
           }
+
+          // 保存状態を確認（datesSavedフラグまたは請求日と入金期日の両方が保存されている場合）
+          const savedDueDate = savedContractData?.confirmedDueDate || data.contractData?.confirmedDueDate;
+          const savedDatesSavedFlag = data.datesSaved || data.contractData?.datesSaved;
+          if (savedDatesSavedFlag || (savedInvoiceDate && savedDueDate)) {
+            setDatesSaved(true);
+          }
         } else {
           // ユーザードキュメントが存在しない場合、今日の日付を設定
           const today = new Date();
@@ -301,6 +309,7 @@ function InitialInvoiceContent() {
       // contractData全体を更新（既存のデータを保持しつつ、新しい値を設定）
       const updateData: any = {
         invoiceDate: invoiceDate, // トップレベルにも保存
+        datesSaved: true, // 保存済みフラグ
         "contractData": {
           ...existingContractData,
           ...contractData, // 既存のcontractDataを保持
@@ -309,11 +318,15 @@ function InitialInvoiceContent() {
           invoicePaymentDate: contractData?.invoicePaymentDate || existingContractData.invoicePaymentDate,
           confirmedDueDate: confirmedDueDate || existingContractData.confirmedDueDate,
           invoiceDate: invoiceDate,
+          datesSaved: true, // 保存済みフラグ
         },
         updatedAt: serverTimestamp(),
       };
 
       await updateDoc(userDocRef, updateData);
+      
+      // 保存状態を更新
+      setDatesSaved(true);
       
       // 成功メッセージ
       alert("保存しました");
@@ -357,7 +370,10 @@ function InitialInvoiceContent() {
                   type="date"
                   value={invoiceDate}
                   onChange={(e) => setInvoiceDate(e.target.value)}
-                  className="text-sm text-gray-900 border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-1 focus:ring-gray-400"
+                  disabled={datesSaved}
+                  className={`text-sm text-gray-900 border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-1 focus:ring-gray-400 ${
+                    datesSaved ? "bg-gray-100 cursor-not-allowed opacity-60" : ""
+                  }`}
                 />
               </div>
             </div>
@@ -438,12 +454,14 @@ function InitialInvoiceContent() {
                     {confirmedDueDate ? (
                       <div>
                         <p className="text-sm text-gray-900 font-medium mb-2">{displayDueDate}</p>
-                        <button
-                          onClick={() => setConfirmedDueDate("")}
-                          className="text-xs text-gray-500 hover:text-gray-700 underline"
-                        >
-                          変更する
-                        </button>
+                        {!datesSaved && (
+                          <button
+                            onClick={() => setConfirmedDueDate("")}
+                            className="text-xs text-gray-500 hover:text-gray-700 underline"
+                          >
+                            変更する
+                          </button>
+                        )}
                       </div>
                     ) : (
                       <div className="space-y-3">
@@ -452,13 +470,16 @@ function InitialInvoiceContent() {
                           value={selectedDueDate}
                           onChange={(e) => setSelectedDueDate(e.target.value)}
                           min={getTodayDate()}
-                          className="text-sm text-gray-900 border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-1 focus:ring-gray-400"
+                          disabled={datesSaved}
+                          className={`text-sm text-gray-900 border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-1 focus:ring-gray-400 ${
+                            datesSaved ? "bg-gray-100 cursor-not-allowed opacity-60" : ""
+                          }`}
                         />
                         <button
                           onClick={handleConfirmDueDate}
-                          disabled={!selectedDueDate}
+                          disabled={!selectedDueDate || datesSaved}
                           className={`px-4 py-2 text-xs font-medium rounded transition-colors ${
-                            selectedDueDate
+                            selectedDueDate && !datesSaved
                               ? "bg-gray-900 text-white hover:bg-gray-800"
                               : "bg-gray-200 text-gray-400 cursor-not-allowed"
                           }`}
@@ -473,15 +494,17 @@ function InitialInvoiceContent() {
                     <p className="text-sm text-gray-900 font-medium">佐賀銀行福岡支店 (普通) 3078446</p>
                   </div>
                 </div>
-                {/* 保存ボタン */}
-                <div className="mt-6 flex justify-end">
-                  <button
-                    onClick={handleSaveDates}
-                    className="px-6 py-2 bg-gray-900 text-white rounded hover:bg-gray-800 transition-colors text-sm font-medium"
-                  >
-                    保存
-                  </button>
-                </div>
+                {/* 保存ボタン（保存済みでない場合のみ表示） */}
+                {!datesSaved && (
+                  <div className="mt-6 flex justify-end">
+                    <button
+                      onClick={handleSaveDates}
+                      className="px-6 py-2 bg-gray-900 text-white rounded hover:bg-gray-800 transition-colors text-sm font-medium"
+                    >
+                      保存
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 
