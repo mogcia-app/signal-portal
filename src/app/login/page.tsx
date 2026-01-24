@@ -77,8 +77,8 @@ export default function LoginPage() {
         await signup(formData.email, formData.password, {
           userType: "toC",
         });
-        // 新規登録成功後、契約書ページへ
-        router.push("/contract");
+        // 新規登録成功後、プライバシーポリシーページへ
+        router.push("/privacy-policy");
       } else {
         // ログイン
         if (!formData.email || !formData.password) {
@@ -87,8 +87,8 @@ export default function LoginPage() {
           return;
         }
         await login(formData.email, formData.password);
-        // ログイン成功後、契約書ページへ
-        router.push("/contract");
+        // ログイン成功後、プライバシーポリシーページへ
+        router.push("/privacy-policy");
       }
     } catch (err: any) {
       console.error("認証エラー:", err);

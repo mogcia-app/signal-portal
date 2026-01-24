@@ -10,7 +10,6 @@ import { useAuth } from "@/contexts/AuthContext";
 const plans: { [key: string]: { name: string; price: number } } = {
   light: { name: "ライト", price: 15000 },
   standard: { name: "スタンダード", price: 60000 },
-  "light-plus": { name: "ライト＋", price: 30000 },
 };
 
 function PaymentContent() {

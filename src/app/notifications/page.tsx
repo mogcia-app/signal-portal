@@ -4,17 +4,21 @@ import React, { useState, useEffect } from 'react'
 import { getPublishedNotifications } from '@/lib/notifications'
 import { Notification } from '@/types/notification'
 import { getUserPlanTier } from '@/lib/plan-access'
-import { UserProfile } from '@/types/user'
+import { useUserProfile } from '@/hooks/useUserProfile'
+import AuthGuard from '@/components/AuthGuard'
 
 export default function NotificationsPage() {
+  const { userProfile, loading: profileLoading } = useUserProfile()
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [loading, setLoading] = useState(true)
-  const [userProfile, setUserProfile] = useState<UserProfile | null>(null)
 
   useEffect(() => {
     const fetchNotifications = async () => {
+      if (profileLoading || !userProfile) {
+        return
+      }
+
       try {
-        // TODO: 実際のユーザープロフィール取得に置き換え
         const planTier = getUserPlanTier(userProfile)
         const targetAudience = planTier === 'ume' ? 'trial' : 'paid'
         
@@ -28,18 +32,21 @@ export default function NotificationsPage() {
     }
 
     fetchNotifications()
-  }, [userProfile])
+  }, [userProfile, profileLoading])
 
-  if (loading) {
+  if (profileLoading || loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="text-gray-600">読み込み中...</div>
-      </div>
+      <AuthGuard requireAuth>
+        <div className="flex min-h-screen items-center justify-center">
+          <div className="text-gray-600">読み込み中...</div>
+        </div>
+      </AuthGuard>
     )
   }
 
   return (
-    <div className="container mx-auto py-8 max-w-4xl">
+    <AuthGuard requireAuth>
+      <div className="container mx-auto py-8 max-w-4xl">
       <h1 className="text-2xl font-bold mb-8 text-gray-900">お知らせ</h1>
       
       {notifications.length === 0 ? (
@@ -91,8 +98,11 @@ export default function NotificationsPage() {
           })}
         </div>
       )}
-    </div>
+      </div>
+    </AuthGuard>
   )
 }
+
+
 
 

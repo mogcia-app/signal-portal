@@ -15,6 +15,7 @@ export default function LoginPage() {
   const [resetEmail, setResetEmail] = useState("");
   const [isResetting, setIsResetting] = useState(false);
   const [formData, setFormData] = useState({
+    name: "",
     email: "",
     password: "",
   });
@@ -74,11 +75,22 @@ export default function LoginPage() {
           setIsLoading(false);
           return;
         }
+        if (!formData.name) {
+          setError("お名前を入力してください");
+          setIsLoading(false);
+          return;
+        }
+        if (formData.password.length < 8) {
+          setError("パスワードは8文字以上で入力してください");
+          setIsLoading(false);
+          return;
+        }
         await signup(formData.email, formData.password, {
+          name: formData.name,
           userType: "toC",
         });
-        // 新規登録成功後、プライバシーポリシーページへ
-        router.push("/privacy-policy");
+        // 新規登録成功後、契約書確認ページへ
+        router.push("/contract-confirmation");
       } else {
         // ログイン
         if (!formData.email || !formData.password) {
@@ -175,6 +187,21 @@ export default function LoginPage() {
               </div>
             )}
 
+            {isSignUp && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  お名前 <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={formData.name}
+                  onChange={(e) => handleInputChange("name", e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  required
+                />
+              </div>
+            )}
+
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 メールアドレス <span className="text-red-500">*</span>
@@ -191,13 +218,19 @@ export default function LoginPage() {
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 パスワード <span className="text-red-500">*</span>
               </label>
-              <input
-                type="password"
-                value={formData.password}
-                onChange={(e) => handleInputChange("password", e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
-              />
-            </div>
+                <input
+                  type="password"
+                  value={formData.password}
+                  onChange={(e) => handleInputChange("password", e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  minLength={8}
+                />
+                {isSignUp && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    8文字以上で入力してください
+                  </p>
+                )}
+              </div>
 
             {!isSignUp && (
               <div className="text-right">

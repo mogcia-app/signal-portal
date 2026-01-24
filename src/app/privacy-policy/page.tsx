@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { doc, getDoc, updateDoc, serverTimestamp } from "firebase/firestore";
+import { doc, getDoc, collection, query, orderBy, limit, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import AuthGuard from "@/components/AuthGuard";
 import { useAuth } from "@/contexts/AuthContext";
@@ -29,14 +29,91 @@ export default function PrivacyPolicyPage() {
 
         if (userDoc.exists()) {
           const data = userDoc.data();
-          const privacyPolicyAgreed = data.privacyPolicyAgreed;
-          const privacyPolicyAgreedDate = data.privacyPolicyAgreedDate;
-
-          if (privacyPolicyAgreed === true) {
-            setAgreed(true);
-            setIsAgreedPersisted(true);
-            if (privacyPolicyAgreedDate) {
-              setAgreedDate(privacyPolicyAgreedDate);
+          
+          // サブコレクションから最新の同意履歴を読み込む
+          try {
+            const consentRef = collection(db, "users", userProfile.id, "privacyPolicyConsents");
+            const consentQuery = query(consentRef, orderBy("agreedAt", "desc"), limit(1));
+            const consentSnapshot = await getDocs(consentQuery);
+            
+            if (!consentSnapshot.empty) {
+              // サブコレクションが存在する場合（新しい構造で保存されている）
+              // 同意済みとして表示する
+              const latestConsent = consentSnapshot.docs[0].data();
+              setAgreed(true);
+              setIsAgreedPersisted(true);
+              if (latestConsent.agreedAt) {
+                const agreedAt = latestConsent.agreedAt;
+                let date: Date;
+                if (agreedAt?.toDate) {
+                  date = agreedAt.toDate();
+                } else if (typeof agreedAt === 'string') {
+                  date = new Date(agreedAt);
+                } else {
+                  date = new Date();
+                }
+                const dateStr = `${date.getFullYear()}年${String(date.getMonth() + 1).padStart(2, '0')}月${String(date.getDate()).padStart(2, '0')}日`;
+                const timeStr = `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+                setAgreedDate(`${dateStr} ${timeStr}`);
+              }
+            } else {
+              // サブコレクションが存在しない場合（古いデータ）
+              const privacyPolicyAgreed = data.privacyPolicyAgreed;
+              const privacyPolicyAgreedDate = data.privacyPolicyAgreedDate;
+              const privacyPolicyAgreedAt = data.privacyPolicyAgreedAt;
+              
+              if (privacyPolicyAgreed === true && privacyPolicyAgreedDate) {
+                // 古いデータがある場合は同意済みとして表示
+                setAgreed(true);
+                setIsAgreedPersisted(true);
+                if (privacyPolicyAgreedAt) {
+                  let date: Date;
+                  if (privacyPolicyAgreedAt?.toDate) {
+                    date = privacyPolicyAgreedAt.toDate();
+                  } else if (typeof privacyPolicyAgreedAt === 'string') {
+                    date = new Date(privacyPolicyAgreedAt);
+                  } else {
+                    date = new Date();
+                  }
+                  const dateStr = `${date.getFullYear()}年${String(date.getMonth() + 1).padStart(2, '0')}月${String(date.getDate()).padStart(2, '0')}日`;
+                  const timeStr = `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+                  setAgreedDate(`${dateStr} ${timeStr}`);
+                } else {
+                  setAgreedDate(privacyPolicyAgreedDate);
+                }
+              } else {
+                setAgreed(false);
+                setIsAgreedPersisted(false);
+              }
+            }
+          } catch (consentError) {
+            console.error("Failed to load consent history:", consentError);
+            // エラー時は古いデータを確認
+            const privacyPolicyAgreed = data.privacyPolicyAgreed;
+            const privacyPolicyAgreedDate = data.privacyPolicyAgreedDate;
+            const privacyPolicyAgreedAt = data.privacyPolicyAgreedAt;
+            
+            if (privacyPolicyAgreed === true && privacyPolicyAgreedDate) {
+              setAgreed(true);
+              setIsAgreedPersisted(true);
+              if (privacyPolicyAgreedAt) {
+                let date: Date;
+                if (privacyPolicyAgreedAt?.toDate) {
+                  date = privacyPolicyAgreedAt.toDate();
+                } else if (typeof privacyPolicyAgreedAt === 'string') {
+                  date = new Date(privacyPolicyAgreedAt);
+                } else {
+                  date = new Date();
+                }
+                const dateStr = `${date.getFullYear()}年${String(date.getMonth() + 1).padStart(2, '0')}月${String(date.getDate()).padStart(2, '0')}日`;
+                const timeStr = `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+                setAgreedDate(`${dateStr} ${timeStr}`);
+              } else {
+                setAgreedDate(privacyPolicyAgreedDate);
+              }
+            } else {
+              setAgreed(false);
+              setIsAgreedPersisted(false);
             }
           }
         }
@@ -52,31 +129,60 @@ export default function PrivacyPolicyPage() {
 
   const handleAgreementChange = async (checked: boolean) => {
     // 既に保存済みの場合は変更不可
-    if (isAgreedPersisted && !checked) {
+    if (isAgreedPersisted) {
       return;
     }
 
-    setAgreed(checked);
-    
-    if (checked && userProfile?.id) {
-      try {
-        // 同意したらFirestoreに保存（日付も保存）
-        const now = new Date();
-        const dateString = `${now.getFullYear()}年${now.getMonth() + 1}月${now.getDate()}日`;
-        
-        const userDocRef = doc(db, "users", userProfile.id);
-        await updateDoc(userDocRef, {
-          privacyPolicyAgreed: true,
-          privacyPolicyAgreedDate: dateString,
-          updatedAt: serverTimestamp(),
-        });
+    if (!checked) {
+      setAgreed(false);
+      return;
+    }
 
-        setIsAgreedPersisted(true);
-        setAgreedDate(dateString);
-      } catch (error) {
-        console.error("Failed to save agreement status:", error);
-        alert("同意状態の保存に失敗しました");
+    setAgreed(true);
+    
+    if (!userProfile?.id) {
+      alert("ユーザー情報が取得できませんでした。再度お試しください。");
+      return;
+    }
+
+    try {
+      // APIルーター経由でサーバー側に保存（IPアドレス、User-Agent、タイムスタンプも記録）
+      const response = await fetch("/api/agreements/save", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          type: "privacyPolicy",
+          agreed: true,
+          userId: userProfile.id,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "同意状態の保存に失敗しました");
       }
+
+      const result = await response.json();
+      
+      setIsAgreedPersisted(true);
+      setAgreed(true);
+      // 日付と時間を表示（APIから返されたtimestampを使用）
+      if (result.data.timestamp) {
+        const date = new Date(result.data.timestamp);
+        const dateStr = `${date.getFullYear()}年${String(date.getMonth() + 1).padStart(2, '0')}月${String(date.getDate()).padStart(2, '0')}日`;
+        const timeStr = `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+        setAgreedDate(`${dateStr} ${timeStr}`);
+      } else {
+        setAgreedDate(result.data.date);
+      }
+      
+      console.log("同意状態をサーバー側に保存しました:", result.data);
+    } catch (error) {
+      console.error("Failed to save agreement status:", error);
+      alert("同意状態の保存に失敗しました。再度お試しください。");
+      setAgreed(false);
     }
   };
 

@@ -2,12 +2,13 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, collection, query, orderBy, limit, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import AuthGuard from "@/components/AuthGuard";
 import { useAuth } from "@/contexts/AuthContext";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
+import { AGREEMENT_ITEMS } from "@/lib/contractVersions";
 
 const plans: { [key: string]: { name: string; price: number; description: string } } = {
   light: { 
@@ -25,11 +26,6 @@ const plans: { [key: string]: { name: string; price: number; description: string
     price: 60000,
     description: "戦略設計から成果最大化までAIが伴走。運用計画、シミュレーション、月次レポート、KPI分析まで網羅。学習型AIが、あなた専用の改善提案を行います。"
   },
-  "light-plus": { 
-    name: "ライト＋", 
-    price: 30000,
-    description: "戦略設計から成果最大化までAIが伴走。運用計画、シミュレーション、月次レポート、KPI分析まで網羅。学習型AIが、あなた専用の改善提案を行います。"
-  },
 };
 
 const INITIAL_FEE = 200000;
@@ -42,6 +38,8 @@ export default function InvoicePreviewPage() {
   const [invoiceData, setInvoiceData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
+  const [agreementItems, setAgreementItems] = useState<any>(null);
+  const [consentHistory, setConsentHistory] = useState<any>(null);
   const invoiceRef = useRef<HTMLDivElement>(null);
   const contractRef = useRef<HTMLDivElement>(null);
 
@@ -100,8 +98,8 @@ export default function InvoicePreviewPage() {
           // monthlyFee から判定できない場合、billingInfo.plan を確認
           if (!planId && data.billingInfo?.plan) {
             const billingPlan = data.billingInfo.plan;
-            // billingInfo.plan が 'light', 'standard', 'professional', 'light-plus' などの場合はそのまま使用
-            if (billingPlan === 'light' || billingPlan === 'standard' || billingPlan === 'professional' || billingPlan === 'light-plus') {
+            // billingInfo.plan が 'light', 'standard', 'professional' などの場合はそのまま使用
+            if (billingPlan === 'light' || billingPlan === 'standard' || billingPlan === 'professional') {
               planId = billingPlan;
             } else {
               // 古い形式のプラン名の場合はマッピング
@@ -162,7 +160,48 @@ export default function InvoicePreviewPage() {
               tax,
               total,
               hasInvoice,
-              confirmedDueDate: savedContractData?.confirmedDueDate || data.contractData?.confirmedDueDate || "",
+              confirmedDueDate: data.confirmedDueDate || savedContractData?.confirmedDueDate || data.contractData?.confirmedDueDate || "",
+            });
+          }
+          
+          // 最新の同意履歴を読み込み
+          try {
+            const consentRef = collection(db, "users", userProfile.id, "contractConsents");
+            const consentQuery = query(consentRef, orderBy("agreedAt", "desc"), limit(1));
+            const consentSnapshot = await getDocs(consentQuery);
+            if (!consentSnapshot.empty) {
+              const latestConsent = consentSnapshot.docs[0].data();
+              setConsentHistory(latestConsent);
+              if (latestConsent.items) {
+                setAgreementItems({
+                  fullContract: latestConsent.items.fullContract?.agreed || false,
+                  unpaidTermination: latestConsent.items.unpaidTermination?.agreed || false,
+                  analysisProhibition: latestConsent.items.analysisProhibition?.agreed || false,
+                  suspension: latestConsent.items.suspension?.agreed || false,
+                  confidentialInfo: latestConsent.items.confidentialInfo?.agreed || false,
+                });
+              }
+            } else {
+              // サブコレクションが存在しない場合、トップレベルのagreementItemsを確認
+              const savedItems = savedContractData?.agreementItems || {};
+              setAgreementItems({
+                fullContract: savedItems.fullContract || false,
+                unpaidTermination: savedItems.unpaidTermination || false,
+                analysisProhibition: savedItems.analysisProhibition || false,
+                suspension: savedItems.suspension || false,
+                confidentialInfo: savedItems.confidentialInfo || false,
+              });
+            }
+          } catch (consentError) {
+            console.error("Failed to load consent history:", consentError);
+            // エラー時はトップレベルのagreementItemsを確認
+            const savedItems = savedContractData?.agreementItems || {};
+            setAgreementItems({
+              fullContract: savedItems.fullContract || false,
+              unpaidTermination: savedItems.unpaidTermination || false,
+              analysisProhibition: savedItems.analysisProhibition || false,
+              suspension: savedItems.suspension || false,
+              confidentialInfo: savedItems.confidentialInfo || false,
             });
           }
         }
@@ -628,22 +667,30 @@ export default function InvoicePreviewPage() {
                   <li>契約者は、本サービスの利用対価として、当社が別途定める利用料金を支払うものとします。</li>
                   <li>本サービスの利用開始は、初期費用および当社が指定する初回利用料金の入金確認後とします。</li>
                   <li>契約者は、以下のいずれかの支払方法を選択するものとします。
-                    <ul className="list-disc list-inside ml-4 mt-2 space-y-1">
+                    <ol className="list-[lower-alpha] list-inside ml-4 mt-2 space-y-1">
                       <li>Stripe決済</li>
                       <li>請求書発行</li>
-                    </ul>
+                    </ol>
                   </li>
+                </ol>
+                
+                <div className="mt-4 mb-2">
+                  <p className="font-semibold text-sm">■ Stripe決済に関する規定</p>
+                </div>
+                <ol className="list-decimal list-inside ml-2 space-y-2" start={4}>
                   <li>Stripe決済を選択した場合、支払日、課金周期、無料期間、次回更新日等は、Stripeが定める決済条件および当社が提示する内容に準ずるものとします。</li>
-                  <li>請求書発行を選択した場合、契約者は、当社と別途合意した支払条件に従い支払うものとします。</li>
-                  <li>請求書発行を選択した場合、契約者は、以下のいずれかの支払日を選択するものとします。
-                    <ul className="list-disc list-inside ml-4 mt-2 space-y-1">
-                      <li>毎月15日支払</li>
-                      <li>毎月30日支払</li>
-                    </ul>
-                  </li>
-                  <li>請求書に定める支払日から2日を経過してもなお入金が確認できない場合、当社は、事前通知なく本サービスの利用を一時停止することができるものとします。</li>
-                  <li>支払遅延が継続する場合、当社は、契約者に対し、年14.6％の割合による遅延損害金を請求できるものとし、あわせて契約の解除その他必要な措置を講じることができます。</li>
-                  <li>支払期日を経過してもなお支払いが確認できない場合、当社は事前通知なく本サービスの利用を停止することができます。</li>
+                </ol>
+
+                <div className="mt-4 mb-2">
+                  <p className="font-semibold text-sm">■ 請求書発行に関する規定</p>
+                </div>
+                <ol className="list-decimal list-inside ml-2 space-y-2" start={5}>
+                  <li>請求書発行を選択した場合、当社は毎月契約日に、本サービスの会員サイト内にて請求書を発行し、契約者に通知するものとします。</li>
+                  <li>契約者は、請求書発行を選択した場合、各月末日（30日）を支払期日として、当社指定の方法により当該請求金額を支払うものとします。</li>
+                  <li>請求書に定める支払期日が金融機関の休業日に該当する場合、当該支払期日の前営業日を支払期日とするものとします。</li>
+                  <li>支払期限の翌日から1日を経過してもなお入金が確認できない場合、当社は、入金が確認されるまで、本サービスおよび付随するツールの利用を停止することができるものとします。</li>
+                  <li>支払期限から5日を経過しても契約者からの連絡がない場合、または当社からの連絡に応答がない場合、当社は契約者の都合による契約解除とみなし、契約者は残存契約期間分の利用料金および当該残存金額の10％に相当する違約金を支払うものとします。</li>
+                  <li>当社は、本サービスの利用停止または契約解除により契約者に生じた損害について、一切の責任を負わないものとします。</li>
                 </ol>
               </div>
 
@@ -752,7 +799,16 @@ export default function InvoicePreviewPage() {
               </div>
 
               <div>
-                <h3 className="font-semibold mb-2">第11条（契約期間および解約）</h3>
+                <h3 className="font-semibold mb-2">第11条（反社会的勢力の排除）</h3>
+                <ol className="list-decimal list-inside ml-2 space-y-2">
+                  <li>契約者は、現在および将来にわたり、自己または自己の役員、従業員、関係者が、反社会的勢力（暴力団、暴力団員、暴力団関係企業、総会屋、社会運動等標ぼうゴロ、その他これらに準ずる者を含みます）に該当しないことを表明し、保証するものとします。</li>
+                  <li>契約者が前項に違反したことが判明した場合、当社は、何らの通知または催告を要することなく、直ちに本契約の全部または一部を解除することができるものとします。</li>
+                  <li>前項による解除により契約者に損害が生じた場合であっても、当社は一切の責任を負わないものとします。</li>
+                </ol>
+              </div>
+
+              <div>
+                <h3 className="font-semibold mb-2">第12条（契約期間および解約）</h3>
                 <p className="mb-3">
                   本契約の有効期間は、利用開始日から1年間とします。期間満了日の1か月前までに、当社所定の方法による解約の意思表示がない場合、本契約は同一条件にて1年間自動更新されるものとします。
                 </p>
@@ -765,7 +821,7 @@ export default function InvoicePreviewPage() {
               </div>
 
               <div>
-                <h3 className="font-semibold mb-2">第12条（利用規約との関係）</h3>
+                <h3 className="font-semibold mb-2">第13条（利用規約との関係）</h3>
                 <ol className="list-decimal list-inside ml-2 space-y-2">
                   <li>本契約は、当社が別途定める会員サイト利用規約およびツール利用規約と一体として適用されるものとします。</li>
                   <li>本契約、会員サイト利用規約およびツール利用規約の内容に相違がある場合は、本契約の定めが優先して適用されるものとします。</li>
@@ -773,7 +829,7 @@ export default function InvoicePreviewPage() {
               </div>
 
               <div>
-                <h3 className="font-semibold mb-2">第13条（準拠法および管轄）</h3>
+                <h3 className="font-semibold mb-2">第14条（準拠法および管轄）</h3>
                 <p>
                   本契約は日本法を準拠法とし、本契約に関して生じる一切の紛争については、福岡地方裁判所を第一審の専属的合意管轄裁判所とします。
                 </p>
@@ -794,6 +850,72 @@ export default function InvoicePreviewPage() {
                   )}
                 </div>
               </div>
+
+              {/* 同意項目の表示 */}
+              {agreementItems && (
+                <div className="mt-8 pt-6 border-t border-gray-200">
+                  <h3 className="font-semibold mb-4">同意項目</h3>
+                  <div className="space-y-3 text-sm">
+                    <div className="flex items-start gap-2">
+                      <span className={agreementItems.fullContract ? "text-green-600 font-bold" : "text-gray-400"}>
+                        {agreementItems.fullContract ? "✓" : "☐"}
+                      </span>
+                      <span className={agreementItems.fullContract ? "text-gray-900" : "text-gray-500"}>
+                        {AGREEMENT_ITEMS.fullContract.label}
+                      </span>
+                    </div>
+                    <div className="flex items-start gap-2">
+                      <span className={agreementItems.unpaidTermination ? "text-green-600 font-bold" : "text-gray-400"}>
+                        {agreementItems.unpaidTermination ? "✓" : "☐"}
+                      </span>
+                      <span className={agreementItems.unpaidTermination ? "text-gray-900" : "text-gray-500"}>
+                        {AGREEMENT_ITEMS.unpaidTermination.label}
+                      </span>
+                    </div>
+                    <div className="flex items-start gap-2">
+                      <span className={agreementItems.analysisProhibition ? "text-green-600 font-bold" : "text-gray-400"}>
+                        {agreementItems.analysisProhibition ? "✓" : "☐"}
+                      </span>
+                      <span className={agreementItems.analysisProhibition ? "text-gray-900" : "text-gray-500"}>
+                        {AGREEMENT_ITEMS.analysisProhibition.label}
+                      </span>
+                    </div>
+                    <div className="flex items-start gap-2">
+                      <span className={agreementItems.suspension ? "text-green-600 font-bold" : "text-gray-400"}>
+                        {agreementItems.suspension ? "✓" : "☐"}
+                      </span>
+                      <span className={agreementItems.suspension ? "text-gray-900" : "text-gray-500"}>
+                        {AGREEMENT_ITEMS.suspension.label}
+                      </span>
+                    </div>
+                    <div className="flex items-start gap-2">
+                      <span className={agreementItems.confidentialInfo ? "text-green-600 font-bold" : "text-gray-400"}>
+                        {agreementItems.confidentialInfo ? "✓" : "☐"}
+                      </span>
+                      <span className={agreementItems.confidentialInfo ? "text-gray-900" : "text-gray-500"}>
+                        {AGREEMENT_ITEMS.confidentialInfo.label}
+                      </span>
+                    </div>
+                  </div>
+                  {consentHistory?.agreedAt && (
+                    <div className="mt-4 pt-4 border-t border-gray-200">
+                      <p className="text-xs text-gray-600">
+                        同意日時: {(() => {
+                          const agreedAt = consentHistory.agreedAt;
+                          if (agreedAt?.toDate) {
+                            const date = agreedAt.toDate();
+                            return `${date.getFullYear()}年${String(date.getMonth() + 1).padStart(2, '0')}月${String(date.getDate()).padStart(2, '0')}日 ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+                          } else if (typeof agreedAt === 'string') {
+                            const date = new Date(agreedAt);
+                            return `${date.getFullYear()}年${String(date.getMonth() + 1).padStart(2, '0')}月${String(date.getDate()).padStart(2, '0')}日 ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+                          }
+                          return "日時不明";
+                        })()}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
             </div>
           </div>

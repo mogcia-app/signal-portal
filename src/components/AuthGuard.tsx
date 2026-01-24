@@ -50,8 +50,8 @@ export default function AuthGuard({
         return;
       }
 
-      // ユーザータイプのチェック（userProfileが存在する場合のみ）
-      if (requireUserType && userProfile && userProfile.userType !== requireUserType) {
+      // ユーザータイプのチェック（userProfileが存在し、userTypeが設定されている場合のみ）
+      if (requireUserType && userProfile && userProfile.userType && userProfile.userType !== requireUserType) {
         // ユーザータイプが一致しない場合は適切なページへリダイレクト
         // ただし、既にそのページにいる場合はリダイレクトしない（無限ループ防止）
         if (requireUserType === "toC" && pathname !== "/home") {

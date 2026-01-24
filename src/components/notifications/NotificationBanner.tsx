@@ -8,9 +8,10 @@ import { UserProfile } from '@/types/user'
 
 interface NotificationBannerProps {
   userProfile?: UserProfile | null
+  fixed?: boolean // 固定位置で表示するかどうか（デフォルト: true）
 }
 
-export function NotificationBanner({ userProfile }: NotificationBannerProps) {
+export function NotificationBanner({ userProfile, fixed = true }: NotificationBannerProps) {
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(true)
@@ -80,12 +81,30 @@ export function NotificationBanner({ userProfile }: NotificationBannerProps) {
     .filter(n => !n.isSticky && !dismissedIds.has(n.id))
     .slice(0, 3) // 最大3件まで表示
 
-  if (loading || (stickyNotifications.length === 0 && regularNotifications.length === 0)) {
+  const hasNotifications = stickyNotifications.length > 0 || regularNotifications.length > 0
+
+  if (loading) {
     return null
   }
 
+  // 通知がない場合でも、fixed={false}の場合はメッセージを表示
+  if (!hasNotifications && fixed) {
+    return null
+  }
+
+  const containerClass = fixed 
+    ? "fixed top-0 left-0 right-0 z-50 space-y-2 p-4"
+    : "space-y-2 mb-4";
+
   return (
-    <div className="fixed top-0 left-0 right-0 z-50 space-y-2 p-4">
+    <div className={containerClass}>
+      {/* 通知がない場合のメッセージ（fixed={false}の場合のみ） */}
+      {!hasNotifications && !fixed && (
+        <div className="border border-gray-200 rounded-lg p-4 bg-gray-50 text-gray-600 text-sm">
+          <p>通知はここに表示されます</p>
+        </div>
+      )}
+
       {/* 固定表示のお知らせ */}
       {stickyNotifications.map(notification => (
         <div
@@ -149,5 +168,7 @@ export function NotificationBanner({ userProfile }: NotificationBannerProps) {
     </div>
   )
 }
+
+
 
 

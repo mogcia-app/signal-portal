@@ -20,12 +20,6 @@ const plans = [
     price: 60000,
     features: ["全機能"],
   },
-  {
-    id: "light-plus",
-    name: "ライト＋",
-    price: 30000,
-    features: ["運用計画・投稿文・ハッシュタグ生成・KPIコンソール"],
-  },
 ];
 
 export default function PlanSelectionPage() {

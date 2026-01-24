@@ -2,15 +2,23 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { doc, getDoc, updateDoc, serverTimestamp } from "firebase/firestore";
+import { doc, getDoc, updateDoc, serverTimestamp, collection, query, where, orderBy, limit, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import AuthGuard from "@/components/AuthGuard";
 import { useAuth } from "@/contexts/AuthContext";
+import { AGREEMENT_ITEMS } from "@/lib/contractVersions";
 
 export default function ContractPage() {
   const router = useRouter();
   const { userProfile } = useAuth();
   const [agreed, setAgreed] = useState(false);
+  const [agreementItems, setAgreementItems] = useState({
+    fullContract: false, // 利用契約書（全文）に同意
+    unpaidTermination: false, // 未払い時の解除・残存期間分請求・違約金（10％）に同意
+    analysisProhibition: false, // 本サービスの解析・模倣・競合目的での利用禁止に同意
+    suspension: false, // 不正利用・支払遅延時の事前通知なしの利用停止に同意
+    confidentialInfo: false, // 非公開情報の第三者共有・転用・競合利用の禁止に同意
+  });
   const [paymentMethods, setPaymentMethods] = useState<string[]>([]);
   const [invoicePaymentDate, setInvoicePaymentDate] = useState<string>("");
   const [contractDate, setContractDate] = useState<string>("");
@@ -26,6 +34,7 @@ export default function ContractPage() {
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [consentHistory, setConsentHistory] = useState<any>(null); // 最新の同意履歴
 
   // 契約日を自動入力（リアルタイムの日付）
   useEffect(() => {
@@ -58,11 +67,67 @@ export default function ContractPage() {
               address: "",
               phone: "",
             });
-            setPaymentMethods(savedContractData.paymentMethods || []);
-            setInvoicePaymentDate(savedContractData.invoicePaymentDate || "");
-            setAgreed(savedContractData.agreed || false);
+            const savedPaymentMethods = savedContractData.paymentMethods || [];
+            setPaymentMethods(savedPaymentMethods);
+            // 請求書発行が選択されている場合、支払日が未設定なら30日支払に設定
+            const savedInvoicePaymentDate = savedContractData.invoicePaymentDate || "";
+            if (savedPaymentMethods.includes("請求書発行") && !savedInvoicePaymentDate) {
+              setInvoicePaymentDate("毎月30日支払");
+            } else {
+              setInvoicePaymentDate(savedInvoicePaymentDate);
+            }
+            // まずagreementItemsを読み込む
+            if (savedContractData.agreementItems) {
+              setAgreementItems({
+                fullContract: savedContractData.agreementItems.fullContract || false,
+                unpaidTermination: savedContractData.agreementItems.unpaidTermination || false,
+                analysisProhibition: savedContractData.agreementItems.analysisProhibition || false,
+                suspension: savedContractData.agreementItems.suspension || false,
+                confidentialInfo: savedContractData.agreementItems.confidentialInfo || false,
+              });
+            }
+            
             if (savedContractData.contractDate) {
               setContractDate(savedContractData.contractDate);
+            }
+            
+            // 最新の同意履歴を読み込み
+            try {
+              const consentRef = collection(db, "users", userProfile.id, "contractConsents");
+              const consentQuery = query(consentRef, orderBy("agreedAt", "desc"), limit(1));
+              const consentSnapshot = await getDocs(consentQuery);
+              if (!consentSnapshot.empty) {
+                const latestConsent = consentSnapshot.docs[0].data();
+                setConsentHistory(latestConsent);
+                // 同意済みの場合は、同意項目も復元
+                if (latestConsent.items) {
+                  const restoredItems = {
+                    fullContract: latestConsent.items.fullContract?.agreed || false,
+                    unpaidTermination: latestConsent.items.unpaidTermination?.agreed || false,
+                    analysisProhibition: latestConsent.items.analysisProhibition?.agreed || false,
+                    suspension: latestConsent.items.suspension?.agreed || false,
+                    confidentialInfo: latestConsent.items.confidentialInfo?.agreed || false,
+                  };
+                  setAgreementItems(restoredItems);
+                  // すべての項目がtrueの場合のみagreedをtrueにする
+                  const allAgreed = Object.values(restoredItems).every(val => val === true);
+                  setAgreed(allAgreed);
+                }
+              } else {
+                // サブコレクションが存在しない場合、agreementItemsがすべてtrueかどうかで判断
+                const savedItems = savedContractData.agreementItems || {};
+                const allItemsAgreed = Object.values(savedItems).length > 0 && 
+                  Object.values(savedItems).every((val: any) => val === true);
+                // 古いデータ（agreementItemsがない、またはすべてfalse）の場合は、agreedをfalseにして再同意を可能にする
+                setAgreed(allItemsAgreed);
+              }
+            } catch (error) {
+              console.error("Failed to load consent history:", error);
+              // エラー時も、agreementItemsがすべてtrueかどうかで判断
+              const savedItems = savedContractData.agreementItems || {};
+              const allItemsAgreed = Object.values(savedItems).length > 0 && 
+                Object.values(savedItems).every((val: any) => val === true);
+              setAgreed(allItemsAgreed);
             }
           } else {
             // Firestoreに保存データがなく、ユーザープロフィールがある場合のみ初期値を設定
@@ -108,6 +173,7 @@ export default function ContractPage() {
           paymentMethods,
           invoicePaymentDate,
           agreed,
+          agreementItems, // 個別同意項目を保存
           contractDate,
           updatedAt: new Date().toISOString(),
         },
@@ -118,7 +184,7 @@ export default function ContractPage() {
     } finally {
       setSaving(false);
     }
-  }, [userProfile?.id, contractData, paymentMethods, invoicePaymentDate, agreed, contractDate, saving]);
+  }, [userProfile?.id, contractData, paymentMethods, invoicePaymentDate, agreed, agreementItems, contractDate, saving]);
 
   // データが変更されたらFirestoreに保存（デバウンス付き）
   useEffect(() => {
@@ -139,6 +205,10 @@ export default function ContractPage() {
   const handlePaymentMethodChange = (method: string, checked: boolean) => {
     if (checked) {
       setPaymentMethods(prev => [...prev, method]);
+      // 請求書発行を選択した場合は自動的に30日支払に設定
+      if (method === "請求書発行") {
+        setInvoicePaymentDate("毎月30日支払");
+      }
     } else {
       setPaymentMethods(prev => prev.filter(m => m !== method));
       if (method === "請求書発行") {
@@ -153,6 +223,13 @@ export default function ContractPage() {
         return newErrors;
       });
     }
+    if (errors.invoicePaymentDate) {
+      setErrors(prev => {
+        const newErrors = { ...prev };
+        delete newErrors.invoicePaymentDate;
+        return newErrors;
+      });
+    }
   };
 
   const validateForm = (): boolean => {
@@ -163,9 +240,9 @@ export default function ContractPage() {
       newErrors.paymentMethods = "支払方法を1つ以上選択してください";
     }
 
-    // 請求書発行を選択した場合、支払日のバリデーション
+    // 請求書発行を選択した場合、支払日が設定されているか確認（自動設定されるが念のため）
     if (paymentMethods.includes("請求書発行") && !invoicePaymentDate) {
-      newErrors.invoicePaymentDate = "支払日を選択してください";
+      newErrors.invoicePaymentDate = "支払日が設定されていません";
     }
 
     // 契約情報のバリデーション
@@ -187,9 +264,27 @@ export default function ContractPage() {
       newErrors.phone = "契約者電話番号を入力してください";
     }
 
-    // 同意のバリデーション
-    if (!agreed) {
-      newErrors.agreed = "サービス利用契約書に同意してください";
+    // 個別同意項目のバリデーション
+    if (!agreementItems.fullContract) {
+      newErrors.fullContract = "利用契約書（全文）に同意してください";
+    }
+    if (!agreementItems.unpaidTermination) {
+      newErrors.unpaidTermination = "未払い時の解除・残存期間分請求・違約金（10％）に同意してください";
+    }
+    if (!agreementItems.analysisProhibition) {
+      newErrors.analysisProhibition = "本サービスの解析・模倣・競合目的での利用禁止に同意してください";
+    }
+    if (!agreementItems.suspension) {
+      newErrors.suspension = "不正利用・支払遅延時の事前通知なしの利用停止に同意してください";
+    }
+    if (!agreementItems.confidentialInfo) {
+      newErrors.confidentialInfo = "非公開情報の第三者共有・転用・競合利用の禁止に同意してください";
+    }
+    
+    // すべての項目に同意した場合、agreedをtrueにする
+    const allAgreed = Object.values(agreementItems).every(item => item === true);
+    if (!allAgreed) {
+      newErrors.agreed = "すべての項目に同意してください";
     }
 
     setErrors(newErrors);
@@ -206,24 +301,48 @@ export default function ContractPage() {
       return;
     }
 
-    // Firestoreに保存してから請求書ページへ
+    // すべての項目に同意した場合のみagreedをtrueにする
+    const allAgreed = Object.values(agreementItems).every(item => item === true);
+    if (!allAgreed) {
+      alert("すべての項目に同意してください");
+      return;
+    }
+
+    // APIルーター経由でサーバー側に保存（IPアドレス、User-Agent、タイムスタンプも記録）
     if (userProfile?.id) {
       try {
-        const userDocRef = doc(db, "users", userProfile.id);
-        await updateDoc(userDocRef, {
-          contractData: {
-            contractData,
-            paymentMethods,
-            invoicePaymentDate,
-            agreed,
-            contractDate,
-            updatedAt: new Date().toISOString(),
+        const response = await fetch("/api/agreements/save", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
           },
-          updatedAt: serverTimestamp(),
+          body: JSON.stringify({
+            type: "contract",
+            agreed: true, // すべての項目に同意した場合のみtrue
+            userId: userProfile.id,
+            contractData: {
+              contractDate: contractDate || new Date().toISOString().split('T')[0],
+              paymentMethods: paymentMethods,
+              invoicePaymentDate: invoicePaymentDate,
+              agreementItems: agreementItems, // 個別同意項目を保存
+            },
+          }),
         });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || "契約データの保存に失敗しました");
+        }
+
+        const result = await response.json();
+        console.log("契約データをサーバー側に保存しました:", result.data);
+        if (result.data?.savedToSubcollection) {
+          console.log("✓ 同意ログをcontractConsentsサブコレクションに保存しました");
+        }
       } catch (error) {
         console.error("Failed to save contract data:", error);
-        // エラーが発生しても次に進む（既にuseEffectで保存されている可能性があるため）
+        alert("契約データの保存に失敗しました。再度お試しください。");
+        return; // エラー時は次に進まない
       }
     }
 
@@ -295,22 +414,30 @@ export default function ContractPage() {
                   <li>契約者は、本サービスの利用対価として、当社が別途定める利用料金を支払うものとします。</li>
                   <li>本サービスの利用開始は、初期費用および当社が指定する初回利用料金の入金確認後とします。</li>
                   <li>契約者は、以下のいずれかの支払方法を選択するものとします。
-                    <ul className="list-disc list-inside ml-4 mt-2 space-y-1">
+                    <ol className="list-[lower-alpha] list-inside ml-4 mt-2 space-y-1">
                       <li>Stripe決済</li>
                       <li>請求書発行</li>
-                    </ul>
+                    </ol>
                   </li>
+                </ol>
+                
+                <div className="mt-4 mb-2">
+                  <p className="font-semibold text-sm">■ Stripe決済に関する規定</p>
+                </div>
+                <ol className="list-decimal list-inside ml-2 space-y-2" start={4}>
                   <li>Stripe決済を選択した場合、支払日、課金周期、無料期間、次回更新日等は、Stripeが定める決済条件および当社が提示する内容に準ずるものとします。</li>
-                  <li>請求書発行を選択した場合、契約者は、当社と別途合意した支払条件に従い支払うものとします。</li>
-                  <li>請求書発行を選択した場合、契約者は、以下のいずれかの支払日を選択するものとします。
-                    <ul className="list-disc list-inside ml-4 mt-2 space-y-1">
-                      <li>毎月15日支払</li>
-                      <li>毎月30日支払</li>
-                    </ul>
-                  </li>
-                  <li>請求書に定める支払日から2日を経過してもなお入金が確認できない場合、当社は、事前通知なく本サービスの利用を一時停止することができるものとします。</li>
-                  <li>支払遅延が継続する場合、当社は、契約者に対し、年14.6％の割合による遅延損害金を請求できるものとし、あわせて契約の解除その他必要な措置を講じることができます。</li>
-                  <li>支払期日を経過してもなお支払いが確認できない場合、当社は事前通知なく本サービスの利用を停止することができます。</li>
+                </ol>
+
+                <div className="mt-4 mb-2">
+                  <p className="font-semibold text-sm">■ 請求書発行に関する規定</p>
+                </div>
+                <ol className="list-decimal list-inside ml-2 space-y-2" start={5}>
+                  <li>請求書発行を選択した場合、当社は毎月契約日に、本サービスの会員サイト内にて請求書を発行し、契約者に通知するものとします。</li>
+                  <li>契約者は、請求書発行を選択した場合、各月末日（30日）を支払期日として、当社指定の方法により当該請求金額を支払うものとします。</li>
+                  <li>請求書に定める支払期日が金融機関の休業日に該当する場合、当該支払期日の前営業日を支払期日とするものとします。</li>
+                  <li>支払期限の翌日から1日を経過してもなお入金が確認できない場合、当社は、入金が確認されるまで、本サービスおよび付随するツールの利用を停止することができるものとします。</li>
+                  <li>支払期限から5日を経過しても契約者からの連絡がない場合、または当社からの連絡に応答がない場合、当社は契約者の都合による契約解除とみなし、契約者は残存契約期間分の利用料金および当該残存金額の10％に相当する違約金を支払うものとします。</li>
+                  <li>当社は、本サービスの利用停止または契約解除により契約者に生じた損害について、一切の責任を負わないものとします。</li>
                 </ol>
               </div>
 
@@ -419,7 +546,16 @@ export default function ContractPage() {
               </div>
 
               <div>
-                <h3 className="font-semibold mb-2">第11条（契約期間および解約）</h3>
+                <h3 className="font-semibold mb-2">第11条（反社会的勢力の排除）</h3>
+                <ol className="list-decimal list-inside ml-2 space-y-2">
+                  <li>契約者は、現在および将来にわたり、自己または自己の役員、従業員、関係者が、反社会的勢力（暴力団、暴力団員、暴力団関係企業、総会屋、社会運動等標ぼうゴロ、その他これらに準ずる者を含みます）に該当しないことを表明し、保証するものとします。</li>
+                  <li>契約者が前項に違反したことが判明した場合、当社は、何らの通知または催告を要することなく、直ちに本契約の全部または一部を解除することができるものとします。</li>
+                  <li>前項による解除により契約者に損害が生じた場合であっても、当社は一切の責任を負わないものとします。</li>
+                </ol>
+              </div>
+
+              <div>
+                <h3 className="font-semibold mb-2">第12条（契約期間および解約）</h3>
                 <p className="mb-3">
                   本契約の有効期間は、利用開始日から1年間とします。期間満了日の1か月前までに、当社所定の方法による解約の意思表示がない場合、本契約は同一条件にて1年間自動更新されるものとします。
                 </p>
@@ -432,7 +568,7 @@ export default function ContractPage() {
               </div>
 
               <div>
-                <h3 className="font-semibold mb-2">第12条（利用規約との関係）</h3>
+                <h3 className="font-semibold mb-2">第13条（利用規約との関係）</h3>
                 <ol className="list-decimal list-inside ml-2 space-y-2">
                   <li>本契約は、当社が別途定める会員サイト利用規約およびツール利用規約と一体として適用されるものとします。</li>
                   <li>本契約、会員サイト利用規約およびツール利用規約の内容に相違がある場合は、本契約の定めが優先して適用されるものとします。</li>
@@ -440,7 +576,7 @@ export default function ContractPage() {
               </div>
 
               <div>
-                <h3 className="font-semibold mb-2">第13条（準拠法および管轄）</h3>
+                <h3 className="font-semibold mb-2">第14条（準拠法および管轄）</h3>
                 <p>
                   本契約は日本法を準拠法とし、本契約に関して生じる一切の紛争については、福岡地方裁判所を第一審の専属的合意管轄裁判所とします。
                 </p>
@@ -485,57 +621,15 @@ export default function ContractPage() {
               <p className="mt-2 text-sm text-red-600">{errors.paymentMethods}</p>
             )}
 
-            {/* 請求書発行を選択した場合の支払日選択 */}
+            {/* 請求書発行を選択した場合の支払日表示 */}
             {paymentMethods.includes("請求書発行") && (
-              <div className="mt-4 ml-7 space-y-2" data-error={errors.invoicePaymentDate ? "true" : undefined}>
-                <p className="text-sm font-medium text-gray-700 mb-2">
-                  支払日を選択してください <span className="text-red-500">*</span>
+              <div className="mt-4 ml-7">
+                <p className="text-sm text-gray-600">
+                  支払期日: <span className="font-medium text-gray-900">各月末日（30日）</span>
                 </p>
-                <label className={`flex items-center gap-2 ${agreed ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
-                  <input
-                    type="radio"
-                    name="invoicePaymentDate"
-                    value="毎月15日支払"
-                    checked={invoicePaymentDate === "毎月15日支払"}
-                    onChange={(e) => {
-                      setInvoicePaymentDate(e.target.value);
-                      if (errors.invoicePaymentDate) {
-                        setErrors(prev => {
-                          const newErrors = { ...prev };
-                          delete newErrors.invoicePaymentDate;
-                          return newErrors;
-                        });
-                      }
-                    }}
-                    disabled={agreed}
-                    className={`w-5 h-5 text-orange-600 border-gray-300 focus:ring-orange-500 ${agreed ? 'opacity-50 cursor-not-allowed' : ''}`}
-                  />
-                  <span className={`text-sm text-gray-700 ${agreed ? 'opacity-50' : ''}`}>毎月15日支払</span>
-                </label>
-                <label className={`flex items-center gap-2 ${agreed ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
-                  <input
-                    type="radio"
-                    name="invoicePaymentDate"
-                    value="毎月30日支払"
-                    checked={invoicePaymentDate === "毎月30日支払"}
-                    onChange={(e) => {
-                      setInvoicePaymentDate(e.target.value);
-                      if (errors.invoicePaymentDate) {
-                        setErrors(prev => {
-                          const newErrors = { ...prev };
-                          delete newErrors.invoicePaymentDate;
-                          return newErrors;
-                        });
-                      }
-                    }}
-                    disabled={agreed}
-                    className={`w-5 h-5 text-orange-600 border-gray-300 focus:ring-orange-500 ${agreed ? 'opacity-50 cursor-not-allowed' : ''}`}
-                  />
-                  <span className={`text-sm text-gray-700 ${agreed ? 'opacity-50' : ''}`}>毎月30日支払</span>
-                </label>
-                {errors.invoicePaymentDate && (
-                  <p className="mt-2 text-sm text-red-600">{errors.invoicePaymentDate}</p>
-                )}
+                <p className="text-xs text-gray-500 mt-1">
+                  ※契約書第4条に基づき、各月末日（30日）を支払期日とします
+                </p>
               </div>
             )}
           </div>
@@ -661,36 +755,192 @@ export default function ContractPage() {
           </div>
 
           {/* 同意チェックボックス */}
-          <div className="flex items-start gap-3" data-error={errors.agreed ? "true" : undefined}>
-            <input
-              type="checkbox"
-              id="contractAgree"
-              checked={agreed}
-              onChange={(e) => {
-                setAgreed(e.target.checked);
-                if (errors.agreed) {
-                  setErrors(prev => {
-                    const newErrors = { ...prev };
-                    delete newErrors.agreed;
-                    return newErrors;
-                  });
-                }
-              }}
-              disabled={agreed}
-              className={`mt-1 w-5 h-5 text-orange-600 border-gray-300 rounded focus:ring-orange-500 ${agreed ? 'opacity-50 cursor-not-allowed' : ''}`}
-            />
-            <label htmlFor="contractAgree" className={`text-sm text-gray-700 ${agreed ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}>
+          <div className="space-y-4">
+            <p className="text-sm font-medium text-gray-900 mb-3">
               サービス利用契約書に同意します <span className="text-red-500">*</span>
-            </label>
-            {errors.agreed && (
-              <p className="mt-1 text-sm text-red-600">{errors.agreed}</p>
+            </p>
+            
+            {/* 1. 利用契約書（全文）に同意 */}
+            <div className="flex items-start gap-3" data-error={errors.fullContract ? "true" : undefined}>
+              <input
+                type="checkbox"
+                id="fullContract"
+                checked={agreementItems.fullContract}
+                onChange={(e) => {
+                  setAgreementItems(prev => ({ ...prev, fullContract: e.target.checked }));
+                  if (errors.fullContract) {
+                    setErrors(prev => {
+                      const newErrors = { ...prev };
+                      delete newErrors.fullContract;
+                      return newErrors;
+                    });
+                  }
+                }}
+                disabled={agreed}
+                className={`mt-1 w-5 h-5 text-orange-600 border-gray-300 rounded focus:ring-orange-500 ${agreed ? 'opacity-50 cursor-not-allowed' : ''}`}
+              />
+              <div className="flex-1">
+                <label htmlFor="fullContract" className={`text-sm text-gray-700 ${agreed ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}>
+                  利用契約書（全文）に同意します
+                </label>
+                {agreementItems.fullContract && (
+                  <p className="text-xs text-green-600 mt-1 ml-0">✓ 同意済み</p>
+                )}
+              </div>
+            </div>
+            {errors.fullContract && (
+              <p className="ml-8 text-sm text-red-600">{errors.fullContract}</p>
+            )}
+
+            {/* 2. 未払い時の解除・残存期間分請求・違約金（10％）に同意 */}
+            <div className="flex items-start gap-3" data-error={errors.unpaidTermination ? "true" : undefined}>
+              <input
+                type="checkbox"
+                id="unpaidTermination"
+                checked={agreementItems.unpaidTermination}
+                onChange={(e) => {
+                  setAgreementItems(prev => ({ ...prev, unpaidTermination: e.target.checked }));
+                  if (errors.unpaidTermination) {
+                    setErrors(prev => {
+                      const newErrors = { ...prev };
+                      delete newErrors.unpaidTermination;
+                      return newErrors;
+                    });
+                  }
+                }}
+                disabled={agreed}
+                className={`mt-1 w-5 h-5 text-orange-600 border-gray-300 rounded focus:ring-orange-500 ${agreed ? 'opacity-50 cursor-not-allowed' : ''}`}
+              />
+              <div className="flex-1">
+                <label htmlFor="unpaidTermination" className={`text-sm text-gray-700 ${agreed ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}>
+                  未払い時の解除・残存契約期間分請求・違約金（10％）に同意します
+                </label>
+                {agreementItems.unpaidTermination && (
+                  <p className="text-xs text-green-600 mt-1 ml-0">✓ 同意済み</p>
+                )}
+              </div>
+            </div>
+            {errors.unpaidTermination && (
+              <p className="ml-8 text-sm text-red-600">{errors.unpaidTermination}</p>
+            )}
+
+            {/* 3. 本サービスの解析・模倣・競合目的での利用禁止に同意 */}
+            <div className="flex items-start gap-3" data-error={errors.analysisProhibition ? "true" : undefined}>
+              <input
+                type="checkbox"
+                id="analysisProhibition"
+                checked={agreementItems.analysisProhibition}
+                onChange={(e) => {
+                  setAgreementItems(prev => ({ ...prev, analysisProhibition: e.target.checked }));
+                  if (errors.analysisProhibition) {
+                    setErrors(prev => {
+                      const newErrors = { ...prev };
+                      delete newErrors.analysisProhibition;
+                      return newErrors;
+                    });
+                  }
+                }}
+                disabled={agreed}
+                className={`mt-1 w-5 h-5 text-orange-600 border-gray-300 rounded focus:ring-orange-500 ${agreed ? 'opacity-50 cursor-not-allowed' : ''}`}
+              />
+              <div className="flex-1">
+                <label htmlFor="analysisProhibition" className={`text-sm text-gray-700 ${agreed ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}>
+                  本サービスの解析・模倣・競合目的での利用禁止に同意します
+                </label>
+                {agreementItems.analysisProhibition && (
+                  <p className="text-xs text-green-600 mt-1 ml-0">✓ 同意済み</p>
+                )}
+              </div>
+            </div>
+            {errors.analysisProhibition && (
+              <p className="ml-8 text-sm text-red-600">{errors.analysisProhibition}</p>
+            )}
+
+            {/* 4. 不正利用・支払遅延時の事前通知なしの利用停止に同意 */}
+            <div className="flex items-start gap-3" data-error={errors.suspension ? "true" : undefined}>
+              <input
+                type="checkbox"
+                id="suspension"
+                checked={agreementItems.suspension}
+                onChange={(e) => {
+                  setAgreementItems(prev => ({ ...prev, suspension: e.target.checked }));
+                  if (errors.suspension) {
+                    setErrors(prev => {
+                      const newErrors = { ...prev };
+                      delete newErrors.suspension;
+                      return newErrors;
+                    });
+                  }
+                }}
+                disabled={agreed}
+                className={`mt-1 w-5 h-5 text-orange-600 border-gray-300 rounded focus:ring-orange-500 ${agreed ? 'opacity-50 cursor-not-allowed' : ''}`}
+              />
+              <div className="flex-1">
+                <label htmlFor="suspension" className={`text-sm text-gray-700 ${agreed ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}>
+                  不正利用・支払遅延時の事前通知なしの利用停止に同意します
+                </label>
+                {agreementItems.suspension && (
+                  <p className="text-xs text-green-600 mt-1 ml-0">✓ 同意済み</p>
+                )}
+              </div>
+            </div>
+            {errors.suspension && (
+              <p className="ml-8 text-sm text-red-600">{errors.suspension}</p>
+            )}
+
+            {/* 5. 非公開情報の第三者共有・転用・競合利用の禁止に同意 */}
+            <div className="flex items-start gap-3" data-error={errors.confidentialInfo ? "true" : undefined}>
+              <input
+                type="checkbox"
+                id="confidentialInfo"
+                checked={agreementItems.confidentialInfo}
+                onChange={(e) => {
+                  setAgreementItems(prev => ({ ...prev, confidentialInfo: e.target.checked }));
+                  if (errors.confidentialInfo) {
+                    setErrors(prev => {
+                      const newErrors = { ...prev };
+                      delete newErrors.confidentialInfo;
+                      return newErrors;
+                    });
+                  }
+                }}
+                disabled={agreed}
+                className={`mt-1 w-5 h-5 text-orange-600 border-gray-300 rounded focus:ring-orange-500 ${agreed ? 'opacity-50 cursor-not-allowed' : ''}`}
+              />
+              <div className="flex-1">
+                <label htmlFor="confidentialInfo" className={`text-sm text-gray-700 ${agreed ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}>
+                  非公開情報の第三者共有・転用・競合利用の禁止に同意します
+                </label>
+                {agreementItems.confidentialInfo && (
+                  <p className="text-xs text-green-600 mt-1 ml-0">✓ 同意済み</p>
+                )}
+              </div>
+            </div>
+            {errors.confidentialInfo && (
+              <p className="ml-8 text-sm text-red-600">{errors.confidentialInfo}</p>
             )}
           </div>
-          {agreed && (
-            <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
-              <p className="text-sm text-red-800">
-                ✓ 契約に同意済みです。
+          
+          {agreed && consentHistory && (
+            <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg">
+              <p className="text-sm text-green-800 font-medium mb-2">
+                同意済み
               </p>
+              {consentHistory.agreedAt && (
+                <p className="text-xs text-green-700">
+                  {(() => {
+                    const agreedAt = consentHistory.agreedAt;
+                    if (agreedAt?.toDate) {
+                      const date = agreedAt.toDate();
+                      return `${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+                    } else if (typeof agreedAt === 'string') {
+                      const date = new Date(agreedAt);
+                      return `${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+                    }
+                    return "日時不明";
+                  })()}
+                </p>
+              )}
             </div>
           )}
         </div>

@@ -1,18 +1,102 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useRouter, usePathname } from "next/navigation";
+import { doc, onSnapshot } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 import SidebarToc from "@/components/SidebarToc";
 import FloatingQnA from "@/components/FloatingQnA";
 import AuthGuard from "@/components/AuthGuard";
-import { useUserProfile } from "@/hooks/useUserProfile";
+import { useAuth } from "@/contexts/AuthContext";
+import { UserProfile } from "@/types/user";
+import { NotificationBanner } from "@/components/notifications/NotificationBanner";
 
 export default function Home() {
-  const { userProfile } = useUserProfile();
+  const router = useRouter();
+  const pathname = usePathname();
+  const { user } = useAuth();
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [loading, setLoading] = useState(true);
   const [checklist, setChecklist] = useState([
     { id: 1, text: "プロフィール設定をする", completed: false, link: "https://signaltool.app/login" },
     { id: 2, text: "最初の投稿を作ってみる", completed: false, link: "https://signaltool.app/login" },
     { id: 3, text: "分析画面を見てみる", completed: false, link: "https://signaltool.app/login" },
   ]);
+
+  // Firestoreからユーザーデータをリアルタイム監視
+  useEffect(() => {
+    if (!user) {
+      setLoading(false);
+      return;
+    }
+
+    // /homeページにいる場合のみリアルタイム監視
+    if (pathname !== '/home') {
+      setLoading(false);
+      return;
+    }
+
+    const userRef = doc(db, "users", user.uid);
+    const unsubscribe = onSnapshot(
+      userRef,
+      (snapshot) => {
+        if (snapshot.exists()) {
+          const data = { id: snapshot.id, ...snapshot.data() } as UserProfile;
+          setUserProfile(data);
+          setLoading(false);
+
+          // accessGrantedがfalseの場合は契約書確認ページにリダイレクト
+          if (!data.accessGranted) {
+            router.push("/contract-confirmation");
+          }
+        } else {
+          setLoading(false);
+          router.push("/contract-confirmation");
+        }
+      },
+      (error) => {
+        console.error("Error fetching user data:", error);
+        setLoading(false);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [user, router, pathname]);
+
+  // Signal.ツールへのアクセスURLを取得（userProfileから取得、なければ動的に生成）
+  const getSignalToolAccessUrl = () => {
+    if (userProfile?.signalToolAccessUrl) {
+      return userProfile.signalToolAccessUrl;
+    }
+    // signalToolAccessUrlが存在しない場合は動的に生成
+    if (userProfile?.id || user?.uid) {
+      const userId = userProfile?.id || user?.uid;
+      const signalToolBaseUrl = process.env.NEXT_PUBLIC_SIGNAL_TOOL_BASE_URL || 'https://signaltool.app';
+      return `${signalToolBaseUrl}/auth/callback?userId=${userId}`;
+    }
+    return null;
+  };
+
+  const signalToolAccessUrl = getSignalToolAccessUrl();
+
+  // ローディング中
+  if (loading) {
+    return (
+      <AuthGuard requireAuth requireUserType="toC">
+        <div className="min-h-screen flex items-center justify-center">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600 mx-auto mb-4" />
+            <p className="text-gray-600">読み込み中...</p>
+          </div>
+        </div>
+      </AuthGuard>
+    );
+  }
+
+  // accessGrantedがfalseの場合は何も表示しない（リダイレクト処理中）
+  if (pathname === '/home' && userProfile && !userProfile.accessGranted) {
+    return null;
+  }
 
   const toggleChecklist = (id: number) => {
     setChecklist(checklist.map(item => 
@@ -35,8 +119,11 @@ export default function Home() {
             ホーム
           </h1>
 
+          {/* 通知バナー */}
+          <NotificationBanner userProfile={userProfile} fixed={false} />
+
           {/* Signal.ツールへのアクセスボタン */}
-          {userProfile?.signalToolAccessUrl && (
+          {signalToolAccessUrl && (
             <div className="mb-6 p-4 bg-orange-50 border border-orange-200 rounded-lg">
               <div className="flex items-center justify-between">
                 <div>
@@ -50,9 +137,9 @@ export default function Home() {
                 <button
                   onClick={() => {
                     // URLにアクセス（Signal.ツール側で認証処理が行われる）
-                    if (userProfile.signalToolAccessUrl) {
-                      console.log('Opening Signal Tool URL:', userProfile.signalToolAccessUrl);
-                      window.open(userProfile.signalToolAccessUrl, '_blank');
+                    if (signalToolAccessUrl) {
+                      console.log('Opening Signal Tool URL:', signalToolAccessUrl);
+                      window.open(signalToolAccessUrl, '_blank');
                     } else {
                       console.error('signalToolAccessUrl is not set');
                       alert('Signal.ツールへのアクセスURLが設定されていません。管理者にお問い合わせください。');

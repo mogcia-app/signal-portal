@@ -23,11 +23,6 @@ const plans: { [key: string]: { name: string; price: number; description: string
     price: 60000,
     description: "戦略設計から成果最大化までAIが伴走。運用計画、シミュレーション、月次レポート、KPI分析まで網羅。学習型AIが、あなた専用の改善提案を行います。"
   },
-  "light-plus": { 
-    name: "ライト＋", 
-    price: 30000,
-    description: "戦略設計から成果最大化までAIが伴走。運用計画、シミュレーション、月次レポート、KPI分析まで網羅。学習型AIが、あなた専用の改善提案を行います。"
-  },
 };
 
 // 初期費用
@@ -146,8 +141,8 @@ function InitialInvoiceContent() {
             if (!planId && data.billingInfo?.plan) {
               const billingPlan = data.billingInfo.plan;
               console.log('billingInfo.plan から判定:', billingPlan);
-              // billingInfo.plan が 'light', 'standard', 'professional', 'light-plus' などの場合はそのまま使用
-              if (billingPlan === 'light' || billingPlan === 'standard' || billingPlan === 'professional' || billingPlan === 'light-plus') {
+              // billingInfo.plan が 'light', 'standard', 'professional' などの場合はそのまま使用
+              if (billingPlan === 'light' || billingPlan === 'standard' || billingPlan === 'professional') {
                 planId = billingPlan;
               } else {
                 // 古い形式のプラン名の場合はマッピング
@@ -197,8 +192,13 @@ function InitialInvoiceContent() {
             setInvoiceDate(`${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`);
           }
 
+          // 入金期日を取得（トップレベルまたはcontractDataから）
+          const savedDueDate = data.confirmedDueDate || savedContractData?.confirmedDueDate || data.contractData?.confirmedDueDate;
+          if (savedDueDate) {
+            setConfirmedDueDate(savedDueDate);
+          }
+
           // 保存状態を確認（datesSavedフラグまたは請求日と入金期日の両方が保存されている場合）
-          const savedDueDate = savedContractData?.confirmedDueDate || data.contractData?.confirmedDueDate;
           const savedDatesSavedFlag = data.datesSaved || data.contractData?.datesSaved;
           if (savedDatesSavedFlag || (savedInvoiceDate && savedDueDate)) {
             setDatesSaved(true);
@@ -224,14 +224,14 @@ function InitialInvoiceContent() {
     return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
   };
 
-  // 入金期日の初期値を設定（請求書発行の場合のみ）
+  // 入金期日の初期値を設定（請求書発行の場合のみ、かつ保存されていない場合のみ）
   useEffect(() => {
-    if (contractData?.paymentMethods?.includes("請求書発行") && !confirmedDueDate) {
+    if (contractData?.paymentMethods?.includes("請求書発行") && !confirmedDueDate && !datesSaved) {
       // 初期値として今日の日付を設定
       const today = getTodayDate();
       setSelectedDueDate(today);
     }
-  }, [contractData, confirmedDueDate]);
+  }, [contractData, confirmedDueDate, datesSaved]);
 
   const handleNext = () => {
     router.push("/invoice-preview");
@@ -296,43 +296,53 @@ function InitialInvoiceContent() {
 
   // 請求日、入金期日、契約日を保存する関数
   const handleSaveDates = async () => {
-    if (!userProfile?.id) return;
+    if (!userProfile?.id || datesSaved) return; // 既に保存済みの場合は何もしない
+
+    // 請求日と入金期日の両方が設定されているか確認
+    if (!invoiceDate) {
+      alert("請求日を選択してください");
+      return;
+    }
+
+    if (!confirmedDueDate) {
+      alert("入金期日を確定してください");
+      return;
+    }
 
     try {
-      const userDocRef = doc(db, "users", userProfile.id);
-      
-      // 既存のcontractDataを取得して保持
-      const userDoc = await getDoc(userDocRef);
-      const existingData = userDoc.exists() ? userDoc.data() : {};
-      const existingContractData = existingData.contractData || {};
-      
-      // contractData全体を更新（既存のデータを保持しつつ、新しい値を設定）
-      const updateData: any = {
-        invoiceDate: invoiceDate, // トップレベルにも保存
-        datesSaved: true, // 保存済みフラグ
-        "contractData": {
-          ...existingContractData,
-          ...contractData, // 既存のcontractDataを保持
-          contractDate: contractData?.contractDate || existingContractData.contractDate,
-          paymentMethods: contractData?.paymentMethods || existingContractData.paymentMethods,
-          invoicePaymentDate: contractData?.invoicePaymentDate || existingContractData.invoicePaymentDate,
-          confirmedDueDate: confirmedDueDate || existingContractData.confirmedDueDate,
-          invoiceDate: invoiceDate,
-          datesSaved: true, // 保存済みフラグ
+      // APIルーター経由でサーバー側に保存（IPアドレス、User-Agent、タイムスタンプも記録）
+      const response = await fetch("/api/agreements/save", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
         },
-        updatedAt: serverTimestamp(),
-      };
+        body: JSON.stringify({
+          type: "initialInvoice",
+          agreed: true, // 日付保存済みフラグ
+          userId: userProfile.id,
+          invoiceData: {
+            invoiceDate: invoiceDate,
+            confirmedDueDate: confirmedDueDate,
+          },
+        }),
+      });
 
-      await updateDoc(userDocRef, updateData);
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "日付の保存に失敗しました");
+      }
+
+      const result = await response.json();
+      console.log("請求書の日付をサーバー側に保存しました:", result.data);
       
-      // 保存状態を更新
+      // 保存状態を更新（これにより日付フィールドが無効化される）
       setDatesSaved(true);
       
       // 成功メッセージ
-      alert("保存しました");
+      alert("保存しました。これ以降、請求日と入金期日は変更できません。");
     } catch (error) {
       console.error("Failed to save dates:", error);
-      alert("保存に失敗しました");
+      alert("保存に失敗しました。再度お試しください。");
     }
   };
 
@@ -366,15 +376,17 @@ function InitialInvoiceContent() {
               </div>
               <div className="text-right space-y-1">
                 <p className="text-xs text-gray-500 font-light tracking-wide mb-2">請求日</p>
-                <input
-                  type="date"
-                  value={invoiceDate}
-                  onChange={(e) => setInvoiceDate(e.target.value)}
-                  disabled={datesSaved}
-                  className={`text-sm text-gray-900 border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-1 focus:ring-gray-400 ${
-                    datesSaved ? "bg-gray-100 cursor-not-allowed opacity-60" : ""
-                  }`}
-                />
+                {datesSaved ? (
+                  <p className="text-sm text-gray-900 font-medium">{invoiceDate}</p>
+                ) : (
+                  <input
+                    type="date"
+                    value={invoiceDate}
+                    onChange={(e) => setInvoiceDate(e.target.value)}
+                    disabled={datesSaved}
+                    className="text-sm text-gray-900 border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-1 focus:ring-gray-400"
+                  />
+                )}
               </div>
             </div>
 
@@ -451,19 +463,22 @@ function InitialInvoiceContent() {
                 <div className="grid grid-cols-2 gap-12">
                   <div>
                     <p className="text-xs text-gray-500 font-light tracking-wide mb-3">入金期日</p>
-                    {confirmedDueDate ? (
+                    {datesSaved ? (
+                      // 保存済みの場合は表示のみ
+                      <p className="text-sm text-gray-900 font-medium">{displayDueDate}</p>
+                    ) : confirmedDueDate ? (
+                      // 確定済みだが未保存の場合は変更可能
                       <div>
                         <p className="text-sm text-gray-900 font-medium mb-2">{displayDueDate}</p>
-                        {!datesSaved && (
-                          <button
-                            onClick={() => setConfirmedDueDate("")}
-                            className="text-xs text-gray-500 hover:text-gray-700 underline"
-                          >
-                            変更する
-                          </button>
-                        )}
+                        <button
+                          onClick={() => setConfirmedDueDate("")}
+                          className="text-xs text-gray-500 hover:text-gray-700 underline"
+                        >
+                          変更する
+                        </button>
                       </div>
                     ) : (
+                      // 未確定の場合は選択可能
                       <div className="space-y-3">
                         <input
                           type="date"
@@ -471,9 +486,7 @@ function InitialInvoiceContent() {
                           onChange={(e) => setSelectedDueDate(e.target.value)}
                           min={getTodayDate()}
                           disabled={datesSaved}
-                          className={`text-sm text-gray-900 border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-1 focus:ring-gray-400 ${
-                            datesSaved ? "bg-gray-100 cursor-not-allowed opacity-60" : ""
-                          }`}
+                          className="text-sm text-gray-900 border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-1 focus:ring-gray-400"
                         />
                         <button
                           onClick={handleConfirmDueDate}

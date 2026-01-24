@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { doc, getDoc, updateDoc, serverTimestamp } from "firebase/firestore";
+import { doc, getDoc, collection, query, orderBy, limit, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import AuthGuard from "@/components/AuthGuard";
 import { useAuth } from "@/contexts/AuthContext";
@@ -30,14 +30,91 @@ export default function ToolTermsAgreementPage() {
 
         if (userDoc.exists()) {
           const data = userDoc.data();
-          const toolTermsAgreed = data.toolTermsAgreed;
-          const toolTermsAgreedDate = data.toolTermsAgreedDate;
-
-          if (toolTermsAgreed === true) {
-            setAgreed(true);
-            setIsAgreedPersisted(true);
-            if (toolTermsAgreedDate) {
-              setAgreedDate(toolTermsAgreedDate);
+          
+          // サブコレクションから最新の同意履歴を読み込む
+          try {
+            const consentRef = collection(db, "users", userProfile.id, "toolTermsConsents");
+            const consentQuery = query(consentRef, orderBy("agreedAt", "desc"), limit(1));
+            const consentSnapshot = await getDocs(consentQuery);
+            
+            if (!consentSnapshot.empty) {
+              // サブコレクションが存在する場合（新しい構造で保存されている）
+              // 同意済みとして表示する
+              const latestConsent = consentSnapshot.docs[0].data();
+              setAgreed(true);
+              setIsAgreedPersisted(true);
+              if (latestConsent.agreedAt) {
+                const agreedAt = latestConsent.agreedAt;
+                let date: Date;
+                if (agreedAt?.toDate) {
+                  date = agreedAt.toDate();
+                } else if (typeof agreedAt === 'string') {
+                  date = new Date(agreedAt);
+                } else {
+                  date = new Date();
+                }
+                const dateStr = `${date.getFullYear()}年${String(date.getMonth() + 1).padStart(2, '0')}月${String(date.getDate()).padStart(2, '0')}日`;
+                const timeStr = `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+                setAgreedDate(`${dateStr} ${timeStr}`);
+              }
+            } else {
+              // サブコレクションが存在しない場合（古いデータ）
+              const toolTermsAgreed = data.toolTermsAgreed;
+              const toolTermsAgreedDate = data.toolTermsAgreedDate;
+              const toolTermsAgreedAt = data.toolTermsAgreedAt;
+              
+              if (toolTermsAgreed === true && toolTermsAgreedDate) {
+                // 古いデータがある場合は同意済みとして表示
+                setAgreed(true);
+                setIsAgreedPersisted(true);
+                if (toolTermsAgreedAt) {
+                  let date: Date;
+                  if (toolTermsAgreedAt?.toDate) {
+                    date = toolTermsAgreedAt.toDate();
+                  } else if (typeof toolTermsAgreedAt === 'string') {
+                    date = new Date(toolTermsAgreedAt);
+                  } else {
+                    date = new Date();
+                  }
+                  const dateStr = `${date.getFullYear()}年${String(date.getMonth() + 1).padStart(2, '0')}月${String(date.getDate()).padStart(2, '0')}日`;
+                  const timeStr = `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+                  setAgreedDate(`${dateStr} ${timeStr}`);
+                } else {
+                  setAgreedDate(toolTermsAgreedDate);
+                }
+              } else {
+                setAgreed(false);
+                setIsAgreedPersisted(false);
+              }
+            }
+          } catch (consentError) {
+            console.error("Failed to load consent history:", consentError);
+            // エラー時は古いデータを確認
+            const toolTermsAgreed = data.toolTermsAgreed;
+            const toolTermsAgreedDate = data.toolTermsAgreedDate;
+            const toolTermsAgreedAt = data.toolTermsAgreedAt;
+            
+            if (toolTermsAgreed === true && toolTermsAgreedDate) {
+              setAgreed(true);
+              setIsAgreedPersisted(true);
+              if (toolTermsAgreedAt) {
+                let date: Date;
+                if (toolTermsAgreedAt?.toDate) {
+                  date = toolTermsAgreedAt.toDate();
+                } else if (typeof toolTermsAgreedAt === 'string') {
+                  date = new Date(toolTermsAgreedAt);
+                } else {
+                  date = new Date();
+                }
+                const dateStr = `${date.getFullYear()}年${String(date.getMonth() + 1).padStart(2, '0')}月${String(date.getDate()).padStart(2, '0')}日`;
+                const timeStr = `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+                setAgreedDate(`${dateStr} ${timeStr}`);
+              } else {
+                setAgreedDate(toolTermsAgreedDate);
+              }
+            } else {
+              setAgreed(false);
+              setIsAgreedPersisted(false);
             }
           }
         }
@@ -53,71 +130,67 @@ export default function ToolTermsAgreementPage() {
 
   const handleAgreementChange = async (checked: boolean) => {
     // 既に保存済みの場合は変更不可
-    if (isAgreedPersisted && !checked) {
+    if (isAgreedPersisted) {
       return;
     }
 
-    setAgreed(checked);
-    
-    if (checked && userProfile?.id) {
-      try {
-        // 同意したらFirestoreに保存（日付も保存）
-        const now = new Date();
-        const dateString = `${now.getFullYear()}年${now.getMonth() + 1}月${now.getDate()}日`;
-        
-        const userDocRef = doc(db, "users", userProfile.id);
-        await updateDoc(userDocRef, {
-          toolTermsAgreed: true,
-          toolTermsAgreedDate: dateString,
-          updatedAt: serverTimestamp(),
-        });
+    if (!checked) {
+      setAgreed(false);
+      return;
+    }
 
-        setIsAgreedPersisted(true);
-        setAgreedDate(dateString);
-      } catch (error) {
-        console.error("Failed to save agreement status:", error);
-        alert("同意状態の保存に失敗しました");
+    setAgreed(true);
+    
+    if (!userProfile?.id) {
+      alert("ユーザー情報が取得できませんでした。再度お試しください。");
+      return;
+    }
+
+    try {
+      // APIルーター経由でサーバー側に保存（IPアドレス、User-Agent、タイムスタンプも記録）
+      const response = await fetch("/api/agreements/save", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          type: "toolTerms",
+          agreed: true,
+          userId: userProfile.id,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "同意状態の保存に失敗しました");
       }
+
+      const result = await response.json();
+      
+      setIsAgreedPersisted(true);
+      setAgreed(true);
+      // 日付と時間を表示（APIから返されたtimestampを使用）
+      if (result.data.timestamp) {
+        const date = new Date(result.data.timestamp);
+        const dateStr = `${date.getFullYear()}年${String(date.getMonth() + 1).padStart(2, '0')}月${String(date.getDate()).padStart(2, '0')}日`;
+        const timeStr = `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+        setAgreedDate(`${dateStr} ${timeStr}`);
+      } else {
+        setAgreedDate(result.data.date);
+      }
+      
+      console.log("同意状態をサーバー側に保存しました:", result.data);
+    } catch (error) {
+      console.error("Failed to save tool terms agreement:", error);
+      alert("同意状態の保存に失敗しました。再度お試しください。");
+      setAgreed(false);
     }
   };
 
   const handleNext = async () => {
     if (agreed || isAgreedPersisted) {
-      // Firestoreから契約データを取得
-      if (userProfile?.id) {
-        try {
-          const userDocRef = doc(db, "users", userProfile.id);
-          const userDoc = await getDoc(userDocRef);
-
-          if (userDoc.exists()) {
-            const data = userDoc.data();
-            const contractData = data.contractData;
-            const paymentMethods = contractData?.paymentMethods || [];
-
-            // 支払方法に応じてリダイレクト
-            if (paymentMethods.includes("請求書発行")) {
-              // 請求書発行を選択している場合はホームページへ（プラン選択は不要）
-              router.push("/home");
-            } else if (paymentMethods.includes("Stripe決済")) {
-              // Stripe決済のみの場合はプラン選択へ
-              router.push("/plan-selection");
-            } else {
-              // 支払方法が設定されていない場合はプラン選択へ（デフォルト）
-              router.push("/plan-selection");
-            }
-          } else {
-            // 契約データが存在しない場合はプラン選択へ
-            router.push("/plan-selection");
-          }
-        } catch (error) {
-          console.error("Failed to load contract data:", error);
-          // エラー時はプラン選択へ（デフォルト）
-          router.push("/plan-selection");
-        }
-      } else {
-        // ユーザープロフィールがない場合はプラン選択へ
-        router.push("/plan-selection");
-      }
+      // 契約書確認ページへリダイレクト（初期費用の支払い確認待ち）
+      router.push("/contract-confirmation");
     }
   };
 
@@ -309,11 +382,17 @@ export default function ToolTermsAgreementPage() {
                 isAgreedPersisted ? "cursor-default" : "cursor-pointer"
               }`}
             >
-              Signal.ツール利用規約に同意します
-              {isAgreedPersisted && agreedDate && (
-                <span className="ml-2 text-xs text-gray-500">
-                  （同意日: {agreedDate}）
-                </span>
+              {isAgreedPersisted ? (
+                <>
+                  同意済み
+                  {agreedDate && (
+                    <span className="ml-2 text-xs text-gray-500">
+                      （同意日: {agreedDate}）
+                    </span>
+                  )}
+                </>
+              ) : (
+                "Signal.ツール利用規約に同意します"
               )}
             </label>
           </div>
@@ -328,9 +407,9 @@ export default function ToolTermsAgreementPage() {
           </button>
           <button
             onClick={handleNext}
-            disabled={!agreed}
+            disabled={!agreed && !isAgreedPersisted}
             className={`px-6 py-2 rounded-lg font-medium transition-colors ${
-              agreed
+              agreed || isAgreedPersisted
                 ? "bg-orange-600 text-white hover:bg-orange-700"
                 : "bg-gray-300 text-gray-500 cursor-not-allowed"
             }`}

@@ -17,6 +17,14 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // 請求書（ユーザーは自分の請求書のみ読み取り可能）
+    match /invoices/{invoiceId} {
+      allow read: if isAuthenticated() && 
+                       resource.data.userId == request.auth.uid;
+      // 書き込みはAPI route経由のみ（サーバー側で処理）
+      allow write: if false;
+    }
+
     // ブログ投稿（読み取りのみ）
     match /blogPosts/{postId} {
       // 認証済みユーザーで、公開中の投稿のみ読み取り可能
@@ -45,6 +53,32 @@ service cloud.firestore {
       
       // 作成はAuthContextで行う（認証済みユーザーのみ）
       allow create: if isAuthenticated() && request.auth.uid == userId;
+      
+      // 同意ログサブコレクション（法的証拠として保存）
+      match /contractConsents/{consentId} {
+        // 自分自身の同意ログのみ読み取り可能
+        allow read: if isAuthenticated() && request.auth.uid == userId;
+        // 書き込みはAPI route経由のみ（サーバー側で処理）
+        allow write: if false;
+      }
+      
+      // プライバシーポリシー同意ログサブコレクション
+      match /privacyPolicyConsents/{consentId} {
+        allow read: if isAuthenticated() && request.auth.uid == userId;
+        allow write: if false;
+      }
+      
+      // 会員サイト利用規約同意ログサブコレクション
+      match /memberSiteTermsConsents/{consentId} {
+        allow read: if isAuthenticated() && request.auth.uid == userId;
+        allow write: if false;
+      }
+      
+      // ツール利用規約同意ログサブコレクション
+      match /toolTermsConsents/{consentId} {
+        allow read: if isAuthenticated() && request.auth.uid == userId;
+        allow write: if false;
+      }
     }
 
     // その他のコレクション（一時的な開発用ルール）
