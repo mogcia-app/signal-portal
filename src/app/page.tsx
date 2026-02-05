@@ -135,18 +135,6 @@ export default function LoginPage() {
     }
   };
 
-  // 認証状態の読み込みが完了するまで待つ（認証済みユーザーのリダイレクトを処理するため）
-  if (loading) {
-    return (
-      <div className="flex min-h-screen bg-orange-50 items-center justify-center p-4">
-        <div className="text-center">
-          <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-orange-600 border-t-transparent mb-4"></div>
-          <p className="text-gray-600">読み込み中...</p>
-        </div>
-      </div>
-    );
-  }
-
   // ログイン成功後、userProfileが更新されたら同意状態をチェックしてリダイレクト
   useEffect(() => {
     const redirectAfterLogin = async () => {
@@ -168,6 +156,18 @@ export default function LoginPage() {
 
     redirectAfterLogin();
   }, [justLoggedIn, userProfile, router]);
+
+  // 認証状態の読み込みが完了するまで待つ（認証済みユーザーのリダイレクトを処理するため）
+  if (loading) {
+    return (
+      <div className="flex min-h-screen bg-orange-50 items-center justify-center p-4">
+        <div className="text-center">
+          <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-orange-600 border-t-transparent mb-4"></div>
+          <p className="text-gray-600">読み込み中...</p>
+        </div>
+      </div>
+    );
+  }
 
   // 未認証ユーザーまたは認証状態の読み込み完了後にページを表示
   return (
