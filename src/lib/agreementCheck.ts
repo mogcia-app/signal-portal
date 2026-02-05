@@ -107,3 +107,4 @@ export function getNextAgreementPage(status: AgreementStatus): string | null {
   return null; // すべて同意済み
 }
 
+

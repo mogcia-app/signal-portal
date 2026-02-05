@@ -193,7 +193,7 @@ export default function Home() {
         <div className="max-w-full mx-auto px-8 space-y-8">
 
           {/* 通知バナー */}
-          <NotificationBanner userProfile={userProfile} fixed={false} />
+          <NotificationBanner userProfile={userProfile} />
 
           {/* Signal.ツールへのアクセスボタン */}
           {signalToolAccessUrl && (

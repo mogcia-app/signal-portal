@@ -5,6 +5,7 @@ import {
   orderBy, 
   getDocs,
   doc,
+  getDoc,
   updateDoc,
   increment,
   Timestamp,
@@ -107,6 +108,44 @@ export async function markNotificationAsRead(
   } catch (error) {
     console.error('Error marking notification as read:', error)
     // エラーは無視（読み取り数の更新は重要ではない）
+  }
+}
+
+/**
+ * 読了数を増やす
+ */
+export async function incrementReadCount(id: string): Promise<void> {
+  try {
+    const docRef = doc(db, 'notifications', id)
+    const docSnap = await getDoc(docRef)
+    
+    if (docSnap.exists()) {
+      const currentCount = docSnap.data().readCount || 0
+      await updateDoc(docRef, {
+        readCount: currentCount + 1
+      })
+    }
+  } catch (error) {
+    console.error('Error incrementing read count:', error)
+  }
+}
+
+/**
+ * クリック数を増やす
+ */
+export async function incrementClickCount(id: string): Promise<void> {
+  try {
+    const docRef = doc(db, 'notifications', id)
+    const docSnap = await getDoc(docRef)
+    
+    if (docSnap.exists()) {
+      const currentCount = docSnap.data().clickCount || 0
+      await updateDoc(docRef, {
+        clickCount: currentCount + 1
+      })
+    }
+  } catch (error) {
+    console.error('Error incrementing click count:', error)
   }
 }
 
