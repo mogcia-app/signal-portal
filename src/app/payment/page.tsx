@@ -8,7 +8,7 @@ import AuthGuard from "@/components/AuthGuard";
 import { useAuth } from "@/contexts/AuthContext";
 
 const plans: { [key: string]: { name: string; price: number } } = {
-  light: { name: "ライト", price: 15000 },
+  light: { name: "ベーシック", price: 15000 },
   standard: { name: "スタンダード", price: 60000 },
 };
 
@@ -76,9 +76,9 @@ function PaymentContent() {
             <div>
               <p className="text-gray-900 font-medium">{selectedPlan.name}</p>
               <p className="text-sm text-gray-600">
-                {selectedPlan.name === "ライト" && "投稿文・ハッシュタグ生成"}
+                {selectedPlan.name === "ベーシック" && "投稿文・ハッシュタグ生成"}
                 {selectedPlan.name === "スタンダード" && "全機能"}
-                {selectedPlan.name === "ライト＋" && "運用計画・投稿文・ハッシュタグ生成・KPIコンソール"}
+                {selectedPlan.name === "ベーシック＋" && "運用計画・投稿文・ハッシュタグ生成・KPIコンソール"}
               </p>
             </div>
             <div className="text-right">

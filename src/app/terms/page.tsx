@@ -8,13 +8,11 @@ import FloatingQnA from "@/components/FloatingQnA";
 import AuthGuard from "@/components/AuthGuard";
 import { useAuth } from "@/contexts/AuthContext";
 import { UserProfile } from "@/types/user";
-import jsPDF from "jspdf";
-import html2canvas from "html2canvas";
 import { AGREEMENT_ITEMS } from "@/lib/contractVersions";
 
 const plans: { [key: string]: { name: string; price: number; description: string } } = {
   light: { 
-    name: "ライト", 
+    name: "ベーシック", 
     price: 15000,
     description: "投稿作成をAIで効率化。まずは「続ける」ための基本プラン。週次スケジュール設定、投稿文・ハッシュタグ生成、コメント返信AIなど、日々の投稿作業をまとめてサポート。"
   },
@@ -33,7 +31,7 @@ const plans: { [key: string]: { name: string; price: number; description: string
 const INITIAL_FEE = 200000;
 const TAX_RATE = 0.1;
 
-type TabType = "privacy" | "contract" | "invoice" | "terms";
+type TabType = "privacy" | "contract" | "invoice" | "memberSiteTerms" | "toolTerms";
 
 export default function TermsPage() {
   const { userProfile } = useAuth();
@@ -71,7 +69,14 @@ export default function TermsPage() {
           // contractDataはネストされた構造（contractData.contractData）または直接フィールドの両方に対応
           // ネストされた構造がある場合はそれを使用、なければ直接フィールドを使用
           const contractDataToSet = savedContractData?.contractData || savedContractData || {};
-          setContractData(contractDataToSet);
+          // contractDataには会社情報だけでなく、paymentMethods、invoicePaymentDate、contractDateなども含める
+          setContractData({
+            ...contractDataToSet,
+            paymentMethods: savedContractData?.paymentMethods || [],
+            invoicePaymentDate: savedContractData?.invoicePaymentDate || "",
+            contractDate: savedContractData?.contractDate || "",
+            confirmedDueDate: savedContractData?.confirmedDueDate || data.confirmedDueDate || "",
+          });
           
           // 最新の同意履歴を読み込み
           try {
@@ -143,24 +148,11 @@ export default function TermsPage() {
           // 入金期日を複数の場所から取得（優先順位: トップレベル > contractData > savedContractData）
           const confirmedDueDate = data.confirmedDueDate || savedContractData?.confirmedDueDate || data.contractData?.confirmedDueDate || "";
           
-          // プランIDの取得
+          // プランIDの取得（monthlyFeeから判定）
           let calculatedPlanId: string | null = null;
-          const planTier = data.planTier;
           const monthlyFee = data.billingInfo?.monthlyFee;
           
-          if (planTier && monthlyFee) {
-            if (planTier === 'ume' && monthlyFee === 15000) {
-              calculatedPlanId = 'light';
-            } else if (planTier === 'take' && monthlyFee === 30000) {
-              calculatedPlanId = 'standard';
-            } else if (planTier === 'matsu' && monthlyFee === 60000) {
-              calculatedPlanId = 'professional';
-            } else {
-              if (monthlyFee === 15000) calculatedPlanId = 'light';
-              else if (monthlyFee === 30000) calculatedPlanId = 'standard';
-              else if (monthlyFee === 60000) calculatedPlanId = 'professional';
-            }
-          } else if (monthlyFee) {
+          if (monthlyFee) {
             if (monthlyFee === 15000) calculatedPlanId = 'light';
             else if (monthlyFee === 30000) calculatedPlanId = 'standard';
             else if (monthlyFee === 60000) calculatedPlanId = 'professional';
@@ -266,138 +258,19 @@ export default function TermsPage() {
 
   const planName =
     planId === "light"
-      ? "ライトプラン"
+      ? "ベーシックプラン"
       : planId === "standard"
       ? "スタンダードプラン"
       : planId === "professional"
       ? "プロプラン"
       : "プラン未設定";
 
-  // PDFとして保存する関数
-  const handleSaveAsPDF = async () => {
-    try {
-      const contentElement = document.getElementById("terms-content");
-      if (!contentElement) {
-        alert("PDF化するコンテンツが見つかりません");
-        return;
-      }
-
-      // ローディング表示
-      const loadingMessage = document.createElement("div");
-      loadingMessage.textContent = "PDFを生成中...";
-      loadingMessage.style.position = "fixed";
-      loadingMessage.style.top = "50%";
-      loadingMessage.style.left = "50%";
-      loadingMessage.style.transform = "translate(-50%, -50%)";
-      loadingMessage.style.background = "rgba(0, 0, 0, 0.8)";
-      loadingMessage.style.color = "white";
-      loadingMessage.style.padding = "20px 40px";
-      loadingMessage.style.borderRadius = "8px";
-      loadingMessage.style.zIndex = "9999";
-      document.body.appendChild(loadingMessage);
-
-      // ユーザー情報を取得
-      const userInfo = userData ? {
-        name: userData.name || userData.email || "ユーザー",
-        email: userData.email || "",
-        companyName: userData.companyName || contractData?.companyName || "",
-      } : { name: "ユーザー", email: "", companyName: "" };
-
-      // 現在の日時を取得
-      const now = new Date();
-      const dateString = `${now.getFullYear()}年${now.getMonth() + 1}月${now.getDate()}日 ${now.getHours()}時${now.getMinutes()}分`;
-
-      // タブ名を取得
-      const tabNames: { [key: string]: string } = {
-        privacy: "プライバシーポリシー",
-        contract: "契約書",
-        invoice: "初回請求書",
-        terms: "利用規約",
-      };
-      const currentTabName = tabNames[activeTab] || "契約確認";
-
-      // HTMLをキャンバスに変換
-      const canvas = await html2canvas(contentElement, {
-        scale: 2,
-        useCORS: true,
-        logging: false,
-        backgroundColor: "#ffffff",
-      });
-
-      // PDFを作成
-      const pdf = new jsPDF("p", "mm", "a4");
-      const imgWidth = 210; // A4幅（mm）
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
-      let heightLeft = imgHeight;
-      let position = 0;
-
-      // 最初のページにヘッダー情報を追加
-      pdf.setFontSize(12);
-      pdf.text(`契約確認書 - ${currentTabName}`, 10, 10);
-      pdf.setFontSize(10);
-      pdf.text(`出力日時: ${dateString}`, 10, 16);
-      if (userInfo.companyName) {
-        pdf.text(`契約会社名: ${userInfo.companyName}`, 10, 22);
-      }
-      if (userInfo.name) {
-        pdf.text(`ユーザー名: ${userInfo.name}`, 10, 28);
-      }
-      if (userInfo.email) {
-        pdf.text(`メールアドレス: ${userInfo.email}`, 10, 34);
-      }
-
-      // 同意状態を追加
-      const agreementInfo: string[] = [];
-      if (agreementStatus.privacyPolicy.agreed) {
-        agreementInfo.push(`プライバシーポリシー: 同意済み ${agreementStatus.privacyPolicy.date || ""}`);
-      }
-      if (agreementStatus.contract.agreed) {
-        agreementInfo.push(`契約書: 同意済み ${agreementStatus.contract.date || ""}`);
-      }
-      if (agreementStatus.initialInvoice.agreed) {
-        agreementInfo.push(`初回請求書: 確認済み ${agreementStatus.initialInvoice.date || ""}`);
-      }
-      if (agreementStatus.terms.agreed) {
-        agreementInfo.push(`会員サイト利用規約: 同意済み ${agreementStatus.terms.date || ""}`);
-      }
-      if (agreementStatus.toolTerms.agreed) {
-        agreementInfo.push(`ツール利用規約: 同意済み ${agreementStatus.toolTerms.date || ""}`);
-      }
-
-      let yPos = 40;
-      agreementInfo.forEach((info) => {
-        pdf.text(info, 10, yPos);
-        yPos += 6;
-      });
-
-      // ページ区切り線
-      pdf.line(10, yPos + 2, 200, yPos + 2);
-      position = yPos + 8;
-
-      // 画像をPDFに追加
-      const imgData = canvas.toDataURL("image/png");
-      pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight - position);
-
-      // 複数ページ対応
-      heightLeft -= (297 - position); // A4高さ（mm）から既に使用した高さを引く
-
-      while (heightLeft > 0) {
-        position = heightLeft - imgHeight;
-        pdf.addPage();
-        pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
-        heightLeft -= 297;
-      }
-
-      // PDFをダウンロード
-      const fileName = `契約確認書_${currentTabName}_${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}.pdf`;
-      pdf.save(fileName);
-
-      // ローディングメッセージを削除
-      document.body.removeChild(loadingMessage);
-    } catch (error) {
-      console.error("PDF生成エラー:", error);
-      alert("PDFの生成に失敗しました。再度お試しください。");
-    }
+  const tabNames: { [key: string]: string } = {
+    privacy: "プライバシーポリシー",
+    contract: "Signal. 利用契約書",
+    invoice: "請求書",
+    memberSiteTerms: "会員サイト利用規約",
+    toolTerms: "Signal.ツール利用規約",
   };
 
   return (
@@ -405,20 +278,34 @@ export default function TermsPage() {
       <div className="flex min-h-screen bg-gray-50">
         <SidebarToc />
         
-        <main className="flex-1 p-8">
-          <div className="max-w-4xl mx-auto">
-            <h1 className="text-2xl font-bold text-gray-900 mb-8">
-              契約確認
-            </h1>
+        <main className="flex-1 pt-6 pb-6 px-4">
+          <div className="max-w-full mx-auto px-8">
+          <div className="bg-white shadow-sm border border-gray-200 p-12 mb-12">
+            <div className="text-center mb-12 pt-6">
+              <h1 className="text-4xl font-light text-gray-900 tracking-wide mb-2">
+                {activeTab === "contract" ? (
+                  <><span className="font-bold text-black">Signal</span><span style={{ color: '#ff8a15' }}>.</span> 利用契約書</>
+                ) : activeTab === "toolTerms" ? (
+                  <><span className="font-bold text-black">Signal</span><span style={{ color: '#ff8a15' }}>.</span>ツール利用規約</>
+                ) : (
+                  tabNames[activeTab]
+                )}
+              </h1>
+              <div className="h-px w-24 bg-gray-300 mx-auto mb-4"></div>
+              <p className="text-sm text-gray-600">
+                契約内容の確認
+              </p>
+            </div>
 
             {/* タブ */}
-            <div className="mb-6 border-b border-gray-200">
-              <nav className="flex space-x-8">
+            <div className="mb-8 border-b border-gray-200">
+              <nav className="flex justify-center space-x-8">
                 {[
                   { id: "privacy" as TabType, label: "プライバシーポリシー" },
                   { id: "contract" as TabType, label: "契約書" },
                   { id: "invoice" as TabType, label: "初回請求書" },
-                  { id: "terms" as TabType, label: "利用規約" },
+                  { id: "memberSiteTerms" as TabType, label: "会員サイト利用規約" },
+                  { id: "toolTerms" as TabType, label: (<><span className="font-bold text-black">Signal</span><span style={{ color: '#ff8a15' }}>.</span>ツール利用規約</>) },
                 ].map((tab) => (
                   <button
                     key={tab.id}
@@ -435,46 +322,34 @@ export default function TermsPage() {
               </nav>
             </div>
 
-            {/* PDF保存ボタン */}
-            <div className="mb-4 flex justify-end">
-              <button
-                onClick={handleSaveAsPDF}
-                className="px-4 py-2 bg-orange-600 text-white rounded-lg font-medium hover:bg-orange-700 transition-colors flex items-center gap-2"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                PDFとして保存
-              </button>
-            </div>
-
             {/* コンテンツ */}
-            <div id="terms-content" className="bg-white rounded-lg border border-gray-200 p-8">
+            <div>
               {/* プライバシーポリシー */}
               {activeTab === "privacy" && (
                 <div className="space-y-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-xl font-semibold text-gray-900">
-                      プライバシーポリシー
-                    </h2>
-                    {agreementStatus.privacyPolicy.agreed && (
-                      <div className="flex items-center gap-2 text-green-600">
-                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                        </svg>
-                        <span className="text-sm font-medium">
-                          同意済み {agreementStatus.privacyPolicy.date && `(${agreementStatus.privacyPolicy.date})`}
+                  {agreementStatus.privacyPolicy.agreed && (
+                    <div className="bg-gray-100 border-2 border-black p-4 mb-4">
+                      <p className="text-sm text-red-800 font-bold flex items-center gap-2">
+                        <span className="inline-flex items-center justify-center w-5 h-5 border-2 border-red-800 bg-white">
+                          <svg className="w-3 h-3 text-red-800" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                          </svg>
                         </span>
-                      </div>
-                    )}
-                  </div>
-                  <div className="prose max-w-none">
-                    <div className="bg-gray-50 border border-gray-200 rounded-lg p-6 mb-6">
+                        プライバシーポリシーに同意済みです。同意日: {agreementStatus.privacyPolicy.date}
+                      </p>
+                    </div>
+                  )}
+                  <div className="border-2 border-gray-300 p-6 mb-6 bg-gray-50">
+                    <h2 className="text-lg font-semibold text-gray-900 mb-4">
+                      <span className="font-bold text-black">Signal</span><span style={{ color: '#ff8a15' }}>.</span> プライバシーポリシー
+                    </h2>
+                    <div className="text-sm text-gray-700 space-y-4">
+                      <div className="bg-gray-50 border border-gray-200 p-6 mb-6">
                       <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                        Signal<span style={{ color: '#FF8a15' }}>.</span> プライバシーポリシー
+                        <span className="font-bold text-black">Signal</span><span style={{ color: '#ff8a15' }}>.</span> プライバシーポリシー
                       </h3>
                       <p className="text-sm text-gray-700 leading-relaxed mb-3">
-                        株式会社MOGCIA（以下「当社」といいます。）は、当社が提供するSNS運用支援ツール「Signal.」および関連する会員サイト（以下総称して「本サービス」といいます。）において取得する個人情報および利用情報について、以下のとおりプライバシーポリシー（以下「本ポリシー」といいます。）を定めます。
+                        株式会社MOGCIA（以下「当社」といいます。）は、当社が提供するSNS運用支援ツール「<span className="font-bold text-black">Signal</span><span style={{ color: '#ff8a15' }}>.</span>」および関連する会員サイト（以下総称して「本サービス」といいます。）において取得する個人情報および利用情報について、以下のとおりプライバシーポリシー（以下「本ポリシー」といいます。）を定めます。
                       </p>
                       <p className="text-sm text-gray-700 leading-relaxed">
                         本ポリシーは、法人契約を前提とし、契約法人の役員・従業員・業務委託者等（以下「利用者」）による利用を想定して定められています。
@@ -531,7 +406,7 @@ export default function TermsPage() {
                         <p>当社は、取得した情報について、不正アクセス、漏洩、改ざん、滅失等を防止するため、合理的かつ適切な安全管理措置を講じます。</p>
                       </div>
 
-                      <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                      <div className="bg-gray-50 border border-gray-200 p-4">
                         <h4 className="font-semibold mb-2">お問い合わせ窓口</h4>
                         <p className="text-sm leading-relaxed">
                           <strong>株式会社MOGCIA</strong><br />
@@ -543,41 +418,38 @@ export default function TermsPage() {
                         <p className="text-xs text-gray-500 mt-4">【制定日】2025年06月01日</p>
                       </div>
                     </div>
+                    </div>
                   </div>
-
                 </div>
               )}
 
               {/* 契約書 */}
               {activeTab === "contract" && (
                 <div className="space-y-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-xl font-semibold text-gray-900">
-                      契約書
-                    </h2>
-                    {agreementStatus.contract.agreed && (
-                      <div className="flex items-center gap-2 text-green-600">
-                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                        </svg>
-                        <span className="text-sm font-medium">
-                          同意済み {agreementStatus.contract.date && `(${agreementStatus.contract.date})`}
+                  {agreementStatus.contract.agreed && (
+                    <div className="bg-gray-100 border-2 border-black p-4 mb-4">
+                      <p className="text-sm text-red-800 font-bold flex items-center gap-2">
+                        <span className="inline-flex items-center justify-center w-5 h-5 border-2 border-red-800 bg-white">
+                          <svg className="w-3 h-3 text-red-800" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                          </svg>
                         </span>
-                      </div>
-                    )}
-                  </div>
+                        <span className="font-bold text-black">Signal</span><span style={{ color: '#ff8a15' }}>.</span> 利用契約書に同意済みです。同意日: {agreementStatus.contract.date}
+                      </p>
+                    </div>
+                  )}
                   
                   {contractData ? (
                     <div className="space-y-4">
                       {/* 契約内容 */}
-                      <div className="bg-white border border-gray-200 rounded-lg p-6 mb-4">
+                      <div className="border-2 border-gray-300 p-6 mb-6 bg-gray-50">
                         <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                          Signal. 利用契約書
+                          <span className="font-bold text-black">Signal</span><span style={{ color: '#ff8a15' }}>.</span> 利用契約書
                         </h3>
-                        <div className="h-96 overflow-y-auto text-sm text-gray-700 space-y-4">
+                        <div className="text-sm text-gray-700 space-y-4">
                           <div>
                             <p className="mb-4">
-                              本契約書（以下「本契約」といいます。）は、株式会社MOGCIA（以下「当社」といいます。）が提供するSNS運用支援ツール「Signal.」（以下「本サービス」といいます。）の利用条件について、当社と本サービスを利用する個人または法人（以下「契約者」といいます。）との間で締結されるものです。
+                              本契約書（以下「本契約」といいます。）は、株式会社MOGCIA（以下「当社」といいます。）が提供するSNS運用支援ツール「<span className="font-bold text-black">Signal</span><span style={{ color: '#ff8a15' }}>.</span>」（以下「本サービス」といいます。）の利用条件について、当社と本サービスを利用する個人または法人（以下「契約者」といいます。）との間で締結されるものです。
                             </p>
                           </div>
 
@@ -727,7 +599,7 @@ export default function TermsPage() {
                         </div>
                       </div>
 
-                      <div className="bg-gray-50 p-4 rounded-lg">
+                      <div className="bg-gray-50 p-4">
                         <h3 className="font-semibold mb-3">契約情報</h3>
                         <div className="space-y-2 text-sm">
                           <div className="flex justify-between">
@@ -765,7 +637,7 @@ export default function TermsPage() {
 
                       {/* 同意項目の表示 */}
                       {agreementItems && (
-                        <div className="bg-gray-50 p-4 rounded-lg mt-4">
+                        <div className="bg-gray-50 p-4 mt-4">
                           <h3 className="font-semibold mb-3">同意項目</h3>
                           <div className="space-y-3 text-sm">
                             <div className="flex items-start gap-2">
@@ -829,24 +701,24 @@ export default function TermsPage() {
                         </div>
                       )}
 
-                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                      <div className="bg-gray-50 border border-gray-200 p-4">
                         <h3 className="font-semibold mb-2">支払い確認状況</h3>
                         <div className="space-y-2 text-sm">
                           <div className="flex justify-between">
                             <span>初期費用:</span>
-                            <span className={userData?.initialPaymentConfirmed ? "text-green-600 font-semibold" : "text-gray-600"}>
+                            <span className={userData?.initialPaymentConfirmed ? "text-red-800 font-bold" : "text-gray-600"}>
                               {userData?.initialPaymentConfirmed ? "✓ 確認済み" : "⏳ 確認待ち"}
                             </span>
                           </div>
                           <div className="flex justify-between">
                             <span>初月分:</span>
-                            <span className={userData?.firstMonthPaymentConfirmed ? "text-green-600 font-semibold" : "text-gray-600"}>
+                            <span className={userData?.firstMonthPaymentConfirmed ? "text-red-800 font-bold" : "text-gray-600"}>
                               {userData?.firstMonthPaymentConfirmed ? "✓ 確認済み" : "⏳ 確認待ち"}
                             </span>
                           </div>
                           <div className="flex justify-between pt-2 border-t">
                             <span>アクセス許可:</span>
-                            <span className={userData?.accessGranted ? "text-green-600 font-semibold" : "text-gray-600"}>
+                            <span className={userData?.accessGranted ? "text-red-800 font-bold" : "text-gray-600"}>
                               {userData?.accessGranted ? "✓ 許可済み" : "⏳ 許可待ち"}
                             </span>
                           </div>
@@ -862,24 +734,22 @@ export default function TermsPage() {
               {/* 初回請求書 */}
               {activeTab === "invoice" && (
                 <div className="space-y-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-xl font-semibold text-gray-900">
-                      初回請求書
-                    </h2>
-                    {agreementStatus.initialInvoice.agreed && (
-                      <div className="flex items-center gap-2 text-green-600">
-                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                        </svg>
-                        <span className="text-sm font-medium">
-                          確認済み {agreementStatus.initialInvoice.date && `(${agreementStatus.initialInvoice.date})`}
+                  {agreementStatus.initialInvoice.agreed && (
+                    <div className="bg-gray-100 border-2 border-black p-4 mb-4">
+                      <p className="text-sm text-red-800 font-bold flex items-center gap-2">
+                        <span className="inline-flex items-center justify-center w-5 h-5 border-2 border-red-800 bg-white">
+                          <svg className="w-3 h-3 text-red-800" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                          </svg>
                         </span>
-                      </div>
-                    )}
-                  </div>
+                        初回請求書を確認済みです。確認日: {agreementStatus.initialInvoice.date}
+                      </p>
+                    </div>
+                  )}
                   
                   {invoiceData ? (
-                    <div className="bg-white shadow-sm border border-gray-200 p-12">
+                    <div className="border-2 border-gray-300 p-6 mb-6 bg-gray-50">
+                      <div className="bg-white shadow-sm border border-gray-200 p-12">
                       <div className="mb-12 flex justify-between items-start border-b border-gray-200 pb-8">
                         <div className="space-y-1">
                           <p className="text-xs text-gray-500 font-light tracking-wide">請求書番号</p>
@@ -1004,43 +874,38 @@ export default function TermsPage() {
                         </p>
                       </div>
                     </div>
+                    </div>
                   ) : (
                     <p className="text-gray-600">請求書データが見つかりませんでした。</p>
                   )}
                 </div>
               )}
 
-              {/* 利用規約 */}
-              {activeTab === "terms" && (
+              {/* 会員サイト利用規約 */}
+              {activeTab === "memberSiteTerms" && (
                 <div className="space-y-6">
-                  <h2 className="text-xl font-semibold text-gray-900 mb-4">
-                    利用規約
-                  </h2>
-                  
-                  {/* 会員サイト利用規約 */}
-                  <div className="mb-8">
-                    <div className="flex items-center justify-between mb-4">
-                      <h3 className="text-lg font-semibold text-gray-900">
-                        会員サイト利用規約
-                      </h3>
-                      {agreementStatus.terms.agreed && (
-                        <div className="flex items-center gap-2 text-green-600">
-                          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                  {agreementStatus.terms.agreed && (
+                    <div className="bg-gray-100 border-2 border-black p-4 mb-4">
+                      <p className="text-sm text-red-800 font-bold flex items-center gap-2">
+                        <span className="inline-flex items-center justify-center w-5 h-5 border-2 border-red-800 bg-white">
+                          <svg className="w-3 h-3 text-red-800" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                           </svg>
-                          <span className="text-sm font-medium">
-                            同意済み {agreementStatus.terms.date && `(${agreementStatus.terms.date})`}
-                          </span>
-                        </div>
-                      )}
+                        </span>
+                        会員サイト利用規約に同意済みです。同意日: {agreementStatus.terms.date}
+                      </p>
                     </div>
-                    
-                    <div className="bg-white border border-gray-200 rounded-lg p-6">
-                      <div className="h-96 overflow-y-auto text-sm text-gray-700 space-y-4">
+                  )}
+                  
+                  <div className="border-2 border-gray-300 p-6 mb-6 bg-gray-50">
+                    <h2 className="text-lg font-semibold text-gray-900 mb-4">
+                      会員サイト利用規約
+                    </h2>
+                    <div className="text-sm text-gray-700 space-y-4">
                         <div>
                           <h4 className="font-semibold mb-2">第1条（適用）</h4>
                           <p className="leading-relaxed">
-                            本規約は、Signal.（以下「当社」といいます。）が提供するサービス（以下「本サービス」といいます。）の利用条件を定めるものです。
+                            本規約は、<span className="font-bold text-black">Signal</span><span style={{ color: '#ff8a15' }}>.</span>（以下「当社」といいます。）が提供するサービス（以下「本サービス」といいます。）の利用条件を定めるものです。
                             登録ユーザーの皆さま（以下「ユーザー」といいます。）には、本規約に従って、本サービスをご利用いただきます。
                           </p>
                         </div>
@@ -1151,35 +1016,37 @@ export default function TermsPage() {
                           <p className="text-xs text-gray-500">以上</p>
                           <p className="text-xs text-gray-500 mt-2">制定日：2026年1月1日</p>
                         </div>
-                      </div>
                     </div>
                   </div>
+                </div>
+              )}
 
-                  {/* ツール利用規約 */}
-                  <div className="mt-8">
-                    <div className="flex items-center justify-between mb-4">
-                      <h3 className="text-lg font-semibold text-gray-900">
-                        Signal.ツール利用規約
-                      </h3>
-                      {agreementStatus.toolTerms.agreed && (
-                        <div className="flex items-center gap-2 text-green-600">
-                          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+              {/* Signal.ツール利用規約 */}
+              {activeTab === "toolTerms" && (
+                <div className="space-y-6">
+                  {agreementStatus.toolTerms.agreed && (
+                    <div className="bg-gray-100 border-2 border-black p-4 mb-4">
+                      <p className="text-sm text-red-800 font-bold flex items-center gap-2">
+                        <span className="inline-flex items-center justify-center w-5 h-5 border-2 border-red-800 bg-white">
+                          <svg className="w-3 h-3 text-red-800" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                           </svg>
-                          <span className="text-sm font-medium">
-                            同意済み {agreementStatus.toolTerms.date && `(${agreementStatus.toolTerms.date})`}
-                          </span>
-                        </div>
-                      )}
+                        </span>
+                        <span className="font-bold text-black">Signal</span><span style={{ color: '#ff8a15' }}>.</span>ツール利用規約に同意済みです。同意日: {agreementStatus.toolTerms.date}
+                      </p>
                     </div>
-                    
-                    <div className="bg-white border border-gray-200 rounded-lg p-6">
-                      <div className="h-96 overflow-y-auto text-sm text-gray-700 space-y-4">
+                  )}
+                  
+                  <div className="border-2 border-gray-300 p-6 mb-6 bg-gray-50">
+                    <h2 className="text-lg font-semibold text-gray-900 mb-4">
+                      <span className="font-bold text-black">Signal</span><span style={{ color: '#ff8a15' }}>.</span>ツール利用規約
+                    </h2>
+                    <div className="text-sm text-gray-700 space-y-4">
                         <div>
                           <h4 className="font-semibold mb-2">第1条（適用）</h4>
                           <ol className="list-decimal list-inside ml-2 space-y-2">
-                            <li>本規約は、株式会社MOGCIA（以下「当社」といいます。）が提供する Signal.ツール（以下「本ツール」といいます。）の利用条件を定めるものです。</li>
-                            <li>本ツールの利用にあたっては、当社が別途定める「Signal.会員サイト利用規約」（以下「会員サイト規約」といいます。）も併せて適用されるものとします。</li>
+                            <li>本規約は、株式会社MOGCIA（以下「当社」といいます。）が提供する <span className="font-bold text-black">Signal</span><span style={{ color: '#ff8a15' }}>.</span>ツール（以下「本ツール」といいます。）の利用条件を定めるものです。</li>
+                            <li>本ツールの利用にあたっては、当社が別途定める「<span className="font-bold text-black">Signal</span><span style={{ color: '#ff8a15' }}>.</span>会員サイト利用規約」（以下「会員サイト規約」といいます。）も併せて適用されるものとします。</li>
                             <li>本規約と会員サイト規約の内容に相違がある場合は、本ツールの利用に関しては本規約が優先して適用されるものとします。</li>
                           </ol>
                         </div>
@@ -1301,11 +1168,11 @@ export default function TermsPage() {
                         </div>
                       </div>
                     </div>
-                  </div>
                 </div>
               )}
             </div>
           </div>
+        </div>
         </main>
 
         <FloatingQnA />

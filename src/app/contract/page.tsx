@@ -362,20 +362,17 @@ export default function ContractPage() {
 
   return (
     <AuthGuard requireAuth>
-      <div className="flex min-h-screen bg-gray-50 items-center justify-center p-4">
-      <div className="w-full max-w-4xl">
-        <div className="text-center mb-8">
-          <h1 className="text-2xl font-bold text-gray-900">
-            <span className="font-bold text-gray-900">Signal</span><span style={{ color: '#ff8a15' }}>.</span> 利用契約書
-          </h1>
-        </div>
-
-        <div className="bg-white rounded-lg shadow-lg p-8 mb-6">
+      <div className="min-h-screen bg-gray-50 py-12 px-4">
+        <div className="max-w-3xl mx-auto">
+          <div className="bg-white shadow-sm border border-gray-200 p-12 mb-8">
           {/* 契約書内容 */}
-          <div className="h-96 overflow-y-auto border border-gray-200 rounded-lg p-6 mb-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">
-              Signal. 利用契約書
-            </h2>
+          <div className="max-h-[600px] overflow-y-auto border-2 border-gray-300 p-6 bg-gray-50">
+            <div className="text-center mb-6">
+              <h1 className="text-4xl font-light text-gray-900 tracking-wide mb-2">
+                <span className="font-bold text-gray-900">Signal</span><span style={{ color: '#ff8a15' }}>.</span> 利用契約書
+              </h1>
+              <div className="h-px w-24 bg-gray-300 mx-auto"></div>
+            </div>
             <div className="text-sm text-gray-700 space-y-4">
               <div>
                 <p className="mb-4">
@@ -591,7 +588,7 @@ export default function ContractPage() {
           </div>
 
           {/* 支払方法選択 */}
-          <div className="mb-6 p-4 bg-gray-50 rounded-lg" data-error={errors.paymentMethods ? "true" : undefined}>
+          <div className="mb-6 p-4 bg-gray-50" data-error={errors.paymentMethods ? "true" : undefined}>
             <h3 className="text-sm font-semibold text-gray-900 mb-3">
               支払方法 <span className="text-red-500">*</span>
             </h3>
@@ -602,7 +599,7 @@ export default function ContractPage() {
                   checked={paymentMethods.includes("Stripe決済")}
                   onChange={(e) => handlePaymentMethodChange("Stripe決済", e.target.checked)}
                   disabled={agreed}
-                  className={`w-5 h-5 text-orange-600 border-gray-300 rounded focus:ring-orange-500 ${agreed ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  className={`w-5 h-5 text-orange-600 border-gray-300 focus:ring-orange-500 ${agreed ? 'opacity-50 cursor-not-allowed' : ''}`}
                 />
                 <span className={`text-sm text-gray-700 ${agreed ? 'opacity-50' : ''}`}>Stripe決済</span>
               </label>
@@ -612,7 +609,7 @@ export default function ContractPage() {
                   checked={paymentMethods.includes("請求書発行")}
                   onChange={(e) => handlePaymentMethodChange("請求書発行", e.target.checked)}
                   disabled={agreed}
-                  className={`w-5 h-5 text-orange-600 border-gray-300 rounded focus:ring-orange-500 ${agreed ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  className={`w-5 h-5 text-orange-600 border-gray-300 focus:ring-orange-500 ${agreed ? 'opacity-50 cursor-not-allowed' : ''}`}
                 />
                 <span className={`text-sm text-gray-700 ${agreed ? 'opacity-50' : ''}`}>請求書発行</span>
               </label>
@@ -645,7 +642,7 @@ export default function ContractPage() {
                   type="text"
                   value={contractDate}
                   readOnly
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-700"
+                  className="w-full px-3 py-2 border border-gray-300 bg-gray-50 text-gray-700"
                 />
               </div>
               <div data-error={errors.companyName ? "true" : undefined}>
@@ -658,7 +655,7 @@ export default function ContractPage() {
                   onChange={(e) => handleInputChange("companyName", e.target.value)}
                   placeholder="契約会社名を入力"
                   disabled={agreed}
-                  className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 ${
+                  className={`w-full px-3 py-2 border focus:outline-none focus:ring-2 focus:ring-orange-500 ${
                     errors.companyName ? "border-red-500" : "border-gray-300"
                   } ${agreed ? 'bg-gray-100 opacity-50 cursor-not-allowed' : 'bg-white'}`}
                 />
@@ -678,7 +675,7 @@ export default function ContractPage() {
                   onChange={(e) => handleInputChange("representativeName", e.target.value)}
                   placeholder="契約担当者名を入力"
                   disabled={agreed}
-                  className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 ${
+                  className={`w-full px-3 py-2 border focus:outline-none focus:ring-2 focus:ring-orange-500 ${
                     errors.representativeName ? "border-red-500" : "border-gray-300"
                   } ${agreed ? 'bg-gray-100 opacity-50 cursor-not-allowed' : 'bg-white'}`}
                 />
@@ -696,7 +693,7 @@ export default function ContractPage() {
                   onChange={(e) => handleInputChange("email", e.target.value)}
                   placeholder="メールアドレスを入力"
                   disabled={agreed}
-                  className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 ${
+                  className={`w-full px-3 py-2 border focus:outline-none focus:ring-2 focus:ring-orange-500 ${
                     errors.email ? "border-red-500" : "border-gray-300"
                   } ${agreed ? 'bg-gray-100 opacity-50 cursor-not-allowed' : 'bg-white'}`}
                 />
@@ -744,7 +741,7 @@ export default function ContractPage() {
           </div>
 
           {/* 当社情報 */}
-          <div className="mb-6 p-4 bg-gray-50 rounded-lg">
+          <div className="mb-6 p-4 bg-gray-50">
             <h3 className="text-sm font-semibold text-gray-900 mb-3">当社</h3>
             <div className="text-sm text-gray-700 space-y-1">
               <p><span className="font-medium">当社名：</span>株式会社MOGCIA</p>
@@ -922,51 +919,46 @@ export default function ContractPage() {
           </div>
           
           {agreed && consentHistory && (
-            <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg">
-              <p className="text-sm text-green-800 font-medium mb-2">
-                同意済み
+            <div className="mt-4 p-4 bg-gray-100 border-2 border-black">
+              <p className="text-sm text-red-800 font-bold">
+                同意済み {consentHistory.agreedAt && (() => {
+                  const agreedAt = consentHistory.agreedAt;
+                  if (agreedAt?.toDate) {
+                    const date = agreedAt.toDate();
+                    return `${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+                  } else if (typeof agreedAt === 'string') {
+                    const date = new Date(agreedAt);
+                    return `${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+                  }
+                  return "日時不明";
+                })()}
               </p>
-              {consentHistory.agreedAt && (
-                <p className="text-xs text-green-700">
-                  {(() => {
-                    const agreedAt = consentHistory.agreedAt;
-                    if (agreedAt?.toDate) {
-                      const date = agreedAt.toDate();
-                      return `${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
-                    } else if (typeof agreedAt === 'string') {
-                      const date = new Date(agreedAt);
-                      return `${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
-                    }
-                    return "日時不明";
-                  })()}
-                </p>
-              )}
             </div>
           )}
-        </div>
 
-        <div className="flex justify-end gap-4">
-          <button
-            onClick={() => router.back()}
-            className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
-          >
-            戻る
-          </button>
-          {!agreed ? (
+          <div className="flex justify-end gap-4 mt-6 pt-4 border-t border-gray-300">
             <button
-              onClick={handleNext}
-              className="px-6 py-2 rounded-lg font-medium transition-colors bg-orange-600 text-white hover:bg-orange-700"
+              onClick={() => router.back()}
+              className="px-6 py-2 border border-gray-300 text-gray-700 hover:bg-gray-50 transition-colors"
             >
-              次へ
+              戻る
             </button>
-          ) : (
-            <button
-              onClick={() => router.push("/initial-invoice")}
-              className="px-6 py-2 rounded-lg font-medium transition-colors bg-orange-600 text-white hover:bg-orange-700"
-            >
-              請求書ページへ
-            </button>
-          )}
+            {!agreed ? (
+              <button
+                onClick={handleNext}
+                className="px-6 py-2 font-medium transition-colors bg-orange-600 text-white hover:bg-orange-700"
+              >
+                次へ
+              </button>
+            ) : (
+              <button
+                onClick={() => router.push("/initial-invoice")}
+                className="px-6 py-2 font-medium transition-colors bg-orange-600 text-white hover:bg-orange-700"
+              >
+                請求書ページへ
+              </button>
+            )}
+          </div>
         </div>
       </div>
       </div>

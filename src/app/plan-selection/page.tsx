@@ -10,7 +10,7 @@ import { useAuth } from "@/contexts/AuthContext";
 const plans = [
   {
     id: "light",
-    name: "ライト",
+    name: "ベーシック",
     price: 15000,
     features: ["投稿文・ハッシュタグ生成"],
   },

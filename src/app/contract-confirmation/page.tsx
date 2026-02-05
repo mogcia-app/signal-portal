@@ -68,7 +68,7 @@ export default function ContractConfirmationPage() {
             <p className="text-red-600 mb-4">ユーザーデータが見つかりませんでした</p>
             <button
               onClick={() => router.push("/")}
-              className="px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700"
+              className="px-4 py-2 bg-orange-600 text-white hover:bg-orange-700"
             >
               ログインページに戻る
             </button>
@@ -80,7 +80,7 @@ export default function ContractConfirmationPage() {
 
   const planName =
     userData.billingInfo?.plan === "light"
-      ? "ライトプラン"
+      ? "ベーシックプラン"
       : userData.billingInfo?.plan === "standard"
       ? "スタンダードプラン"
       : userData.billingInfo?.plan === "professional"
@@ -90,12 +90,15 @@ export default function ContractConfirmationPage() {
   return (
     <AuthGuard requireAuth>
       <div className="min-h-screen bg-gray-50 py-12 px-4">
-        <div className="max-w-4xl mx-auto">
-          <div className="bg-white rounded-lg shadow-md p-8">
-            <h1 className="text-2xl font-bold mb-6">契約内容の確認</h1>
+        <div className="max-w-3xl mx-auto">
+          <div className="bg-white shadow-sm border border-gray-200 p-12 mb-8">
+            <div className="text-center mb-8">
+              <h1 className="text-4xl font-light text-gray-900 tracking-wide mb-2">契約内容の確認</h1>
+              <div className="h-px w-24 bg-gray-300 mx-auto"></div>
+            </div>
 
             {/* 支払い確認状況 */}
-            <div className="mb-8 p-4 bg-blue-50 border border-blue-200 rounded-md">
+            <div className="mb-8 p-4 bg-blue-50 border border-blue-200">
               <h2 className="font-semibold mb-3">支払い確認状況</h2>
               <div className="space-y-2 text-sm">
                 <div className="flex items-center justify-between">
@@ -143,7 +146,7 @@ export default function ContractConfirmationPage() {
             <div className="space-y-6">
               <section>
                 <h2 className="text-xl font-semibold mb-3">契約プラン</h2>
-                <div className="bg-gray-50 p-4 rounded-md">
+                <div className="bg-gray-50 p-4">
                   <p className="font-medium">{planName}</p>
                   <p className="text-gray-600 mt-1">
                     月額: ¥
@@ -154,7 +157,7 @@ export default function ContractConfirmationPage() {
 
               <section>
                 <h2 className="text-xl font-semibold mb-3">利用規約</h2>
-                <div className="bg-gray-50 p-4 rounded-md max-h-96 overflow-y-auto">
+                <div className="bg-gray-50 p-4 max-h-96 overflow-y-auto">
                   <p className="text-sm text-gray-700 whitespace-pre-line">
                     【利用規約】
                     {"\n\n"}
@@ -173,7 +176,7 @@ export default function ContractConfirmationPage() {
 
               <section>
                 <h2 className="text-xl font-semibold mb-3">支払いについて</h2>
-                <div className="bg-yellow-50 border border-yellow-200 p-4 rounded-md">
+                <div className="bg-yellow-50 border border-yellow-200 p-4">
                   <p className="text-sm text-gray-700">
                     初期費用と初月分の支払い確認が完了次第、管理者より会員サイトへのアクセス許可が行われます。
                     確認が完了するまで、しばらくお待ちください。
@@ -184,7 +187,7 @@ export default function ContractConfirmationPage() {
 
             {/* アクセス許可待ちメッセージ */}
             {!userData.accessGranted && (
-              <div className="mt-8 p-4 bg-gray-100 border border-gray-300 rounded-md text-center">
+              <div className="mt-8 p-4 bg-gray-100 border border-gray-300 text-center">
                 <p className="text-gray-700 font-medium mb-2">
                   ⏳ アクセス許可をお待ちください
                 </p>
@@ -199,6 +202,8 @@ export default function ContractConfirmationPage() {
     </AuthGuard>
   );
 }
+
+
 
 
 

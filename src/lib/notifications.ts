@@ -81,7 +81,12 @@ export async function getPublishedNotifications(
     })
 
     return sortedNotifications
-  } catch (error) {
+  } catch (error: any) {
+    // 権限エラーの場合は空配列を返す（未ログイン時の正常な挙動）
+    if (error?.code === 'permission-denied') {
+      console.debug('Permission denied for notifications (user not authenticated)')
+      return []
+    }
     console.error('Error fetching notifications:', error)
     throw error
   }

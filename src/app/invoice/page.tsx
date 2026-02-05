@@ -13,7 +13,7 @@ import html2canvas from "html2canvas";
 
 const plans: { [key: string]: { name: string; price: number; description: string } } = {
   light: { 
-    name: "ライト", 
+    name: "ベーシック", 
     price: 15000,
     description: "投稿作成をAIで効率化。まずは「続ける」ための基本プラン。週次スケジュール設定、投稿文・ハッシュタグ生成、コメント返信AIなど、日々の投稿作業をまとめてサポート。"
   },

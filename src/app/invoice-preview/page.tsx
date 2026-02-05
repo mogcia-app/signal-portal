@@ -12,7 +12,7 @@ import { AGREEMENT_ITEMS } from "@/lib/contractVersions";
 
 const plans: { [key: string]: { name: string; price: number; description: string } } = {
   light: { 
-    name: "ライト", 
+    name: "ベーシック", 
     price: 15000,
     description: "投稿作成をAIで効率化。まずは「続ける」ための基本プラン。週次スケジュール設定、投稿文・ハッシュタグ生成、コメント返信AIなど、日々の投稿作業をまとめてサポート。"
   },
@@ -62,30 +62,10 @@ export default function InvoicePreviewPage() {
           // Adminで変更されたプランを反映するため、planTierとmonthlyFeeの組み合わせを最優先
           let planId = null;
           
-          // まず planTier と monthlyFee の組み合わせで判定（Admin側は松竹梅プランを使用）
-          const planTier = data.planTier; // 'ume' | 'take' | 'matsu'
+          // monthlyFeeから判定
           const monthlyFee = data.billingInfo?.monthlyFee;
           
-          if (planTier && monthlyFee) {
-            // 松竹梅プラン + 料金の組み合わせで判定
-            if (planTier === 'ume' && monthlyFee === 15000) {
-              planId = 'light';
-            } else if (planTier === 'take' && monthlyFee === 30000) {
-              planId = 'standard';
-            } else if (planTier === 'matsu' && monthlyFee === 60000) {
-              planId = 'professional';
-            } else {
-              // 組み合わせが合わない場合は料金のみで判定
-              if (monthlyFee === 15000) {
-                planId = 'light';
-              } else if (monthlyFee === 30000) {
-                planId = 'standard';
-              } else if (monthlyFee === 60000) {
-                planId = 'professional';
-              }
-            }
-          } else if (monthlyFee) {
-            // monthlyFee のみから判定
+          if (monthlyFee) {
             if (monthlyFee === 15000) {
               planId = 'light';
             } else if (monthlyFee === 30000) {
@@ -504,18 +484,15 @@ export default function InvoicePreviewPage() {
 
   return (
     <AuthGuard requireAuth>
-      <div className="min-h-screen bg-gray-50 py-8 px-4">
-        <div className="max-w-5xl mx-auto">
-          {/* ヘッダー */}
-          <div className="mb-8 text-center">
-            <h1 className="text-3xl font-light text-gray-900 tracking-wide mb-4">
-              契約書・請求書プレビュー
-            </h1>
-            
-          </div>
-
+      <div className="min-h-screen bg-gray-50 py-12 px-4">
+        <div className="max-w-3xl mx-auto">
           {/* 請求書プレビュー */}
           <div ref={invoiceRef} className="bg-white shadow-sm border border-gray-200 p-12 mb-8">
+            {/* タイトル */}
+            <div className="mb-12 text-center">
+              <h1 className="text-4xl font-light text-gray-900 tracking-wide mb-2">契約書・請求書プレビュー</h1>
+              <div className="h-px w-24 bg-gray-300 mx-auto"></div>
+            </div>
             <div className="mb-12 flex justify-between items-start border-b border-gray-200 pb-8">
               <div className="space-y-1">
                 <p className="text-xs text-gray-500 font-light tracking-wide">請求書番号</p>
@@ -935,13 +912,13 @@ export default function InvoicePreviewPage() {
           <div className="flex justify-end gap-4">
             <button
               onClick={() => router.back()}
-              className="px-8 py-3 border border-gray-300 rounded text-gray-700 hover:bg-white transition-colors text-sm font-medium"
+              className="px-8 py-3 border border-gray-300 text-gray-700 hover:bg-white transition-colors text-sm font-medium"
             >
               戻る
             </button>
             <button
               onClick={() => router.push("/terms-agreement")}
-              className="px-8 py-3 bg-gray-900 text-white rounded hover:bg-gray-800 transition-colors text-sm font-medium"
+              className="px-8 py-3 bg-orange-600 text-white hover:bg-orange-700 transition-colors text-sm font-medium"
             >
               次へ
             </button>

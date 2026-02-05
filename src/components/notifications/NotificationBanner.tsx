@@ -5,6 +5,7 @@ import { Notification } from '@/types/notification'
 import { getPublishedNotifications, markNotificationAsRead } from '@/lib/notifications'
 import { getUserPlanTier } from '@/lib/plan-access'
 import { UserProfile } from '@/types/user'
+import { useAuth } from '@/contexts/AuthContext'
 
 interface NotificationBannerProps {
   userProfile?: UserProfile | null
@@ -12,12 +13,19 @@ interface NotificationBannerProps {
 }
 
 export function NotificationBanner({ userProfile, fixed = true }: NotificationBannerProps) {
+  const { user } = useAuth()
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     const fetchNotifications = async () => {
+      // 未ログイン時は通知を取得しない
+      if (!user) {
+        setLoading(false)
+        return
+      }
+
       try {
         // ユーザーのプラン階層に基づいてtargetAudienceを決定
         const planTier = getUserPlanTier(userProfile)
@@ -31,7 +39,12 @@ export function NotificationBanner({ userProfile, fixed = true }: NotificationBa
           const dismissed = JSON.parse(localStorage.getItem('dismissedNotifications') || '[]')
           setDismissedIds(new Set(dismissed))
         }
-      } catch (error) {
+      } catch (error: any) {
+        // 権限エラーの場合は無視（未ログイン時の正常な挙動）
+        if (error?.code === 'permission-denied') {
+          console.debug('Permission denied for notifications (user not authenticated)')
+          return
+        }
         console.error('Error fetching notifications:', error)
       } finally {
         setLoading(false)
@@ -39,7 +52,7 @@ export function NotificationBanner({ userProfile, fixed = true }: NotificationBa
     }
 
     fetchNotifications()
-  }, [userProfile])
+  }, [user, userProfile])
 
   const handleDismiss = (notificationId: string) => {
     setDismissedIds(prev => {
@@ -100,7 +113,7 @@ export function NotificationBanner({ userProfile, fixed = true }: NotificationBa
     <div className={containerClass}>
       {/* 通知がない場合のメッセージ（fixed={false}の場合のみ） */}
       {!hasNotifications && !fixed && (
-        <div className="border border-gray-200 rounded-lg p-4 bg-gray-50 text-gray-600 text-sm">
+        <div className="border border-gray-200 p-4 bg-gray-50 text-gray-600 text-sm">
           <p>通知はここに表示されます</p>
         </div>
       )}
@@ -109,7 +122,7 @@ export function NotificationBanner({ userProfile, fixed = true }: NotificationBa
       {stickyNotifications.map(notification => (
         <div
           key={notification.id}
-          className={`border rounded-lg p-4 shadow-lg ${getTypeStyles(notification.type)}`}
+          className={`border p-4 shadow-lg ${getTypeStyles(notification.type)}`}
         >
           <div className="flex items-start gap-3">
             <div className="flex-1 min-w-0">
@@ -120,7 +133,7 @@ export function NotificationBanner({ userProfile, fixed = true }: NotificationBa
                   {notification.tags.map(tag => (
                     <span
                       key={tag}
-                      className="px-2 py-0.5 bg-white/50 rounded text-xs"
+                      className="px-2 py-0.5 bg-white/50 text-xs"
                     >
                       {tag}
                     </span>
@@ -145,7 +158,7 @@ export function NotificationBanner({ userProfile, fixed = true }: NotificationBa
         <div
           key={notification.id}
           onClick={() => handleClick(notification)}
-          className={`border rounded-lg p-3 shadow-md cursor-pointer transition-all hover:shadow-lg ${getTypeStyles(notification.type)}`}
+          className={`border p-3 shadow-md cursor-pointer transition-all hover:shadow-lg ${getTypeStyles(notification.type)}`}
         >
           <div className="flex items-start gap-2">
             <div className="flex-1 min-w-0">

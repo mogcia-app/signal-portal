@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -14,17 +14,16 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [resetEmail, setResetEmail] = useState("");
   const [isResetting, setIsResetting] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [formData, setFormData] = useState({
     email: "",
     password: "",
   });
 
-  // ログイン済みでも/loginページにはアクセス可能（リダイレクトしない）
-
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
-    setError(""); // エラーをクリア
-    setSuccessMessage(""); // 成功メッセージをクリア
+    setError("");
+    setSuccessMessage("");
   };
 
   const handlePasswordReset = async (e: React.FormEvent) => {
@@ -42,7 +41,6 @@ export default function LoginPage() {
       await sendPasswordReset(resetEmail);
       setSuccessMessage("パスワードリセット用のメールを送信しました。メールボックスを確認してください。");
       setResetEmail("");
-      // 3秒後にモーダルを閉じる
       setTimeout(() => {
         setShowPasswordReset(false);
         setSuccessMessage("");
@@ -68,7 +66,6 @@ export default function LoginPage() {
 
     try {
       if (isSignUp) {
-        // 新規登録
         if (!formData.email || !formData.password) {
           setError("メールアドレスとパスワードを入力してください");
           setIsLoading(false);
@@ -77,17 +74,14 @@ export default function LoginPage() {
         await signup(formData.email, formData.password, {
           userType: "toC",
         });
-        // 新規登録成功後、プライバシーポリシーページへ
         router.push("/privacy-policy");
       } else {
-        // ログイン
         if (!formData.email || !formData.password) {
           setError("メールアドレスとパスワードを入力してください");
           setIsLoading(false);
           return;
         }
         await login(formData.email, formData.password);
-        // ログイン成功後、プライバシーポリシーページへ
         router.push("/privacy-policy");
       }
     } catch (err: any) {
@@ -110,83 +104,124 @@ export default function LoginPage() {
     }
   };
 
-  // 認証状態の読み込みが完了するまで待つ（認証済みユーザーのリダイレクトを処理するため）
   if (loading) {
     return (
-      <div className="flex min-h-screen bg-gray-50 items-center justify-center p-4">
+      <div className="flex min-h-screen bg-gradient-to-br from-orange-50 via-white to-orange-50 items-center justify-center p-4">
         <div className="text-center">
+          <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-orange-600 border-t-transparent mb-4"></div>
           <p className="text-gray-600">読み込み中...</p>
         </div>
       </div>
     );
   }
 
-  // 未認証ユーザーまたは認証状態の読み込み完了後にページを表示
   return (
-    <div className="flex min-h-screen bg-gray-50 items-center justify-center p-4">
+    <div className="flex min-h-screen bg-orange-50 items-center justify-center p-4">
       <div className="w-full max-w-md">
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">
-            Signal<span style={{ color: '#FF8a15' }}>.</span>会員サイト
+        {/* ロゴ・タイトルセクション */}
+        <div className="text-center mb-10">
+          <h1 className="text-4xl font-bold text-gray-900 mb-3 tracking-tight">
+            Signal<span className="text-orange-600">.</span>会員サイト
           </h1>
-          <p className="text-gray-600">
-            {isSignUp ? "新規登録" : "アカウントにログイン"}
+          <p className="text-gray-600 text-lg">
+            {isSignUp ? "アカウントを作成して始めましょう" : "アカウントにログイン"}
           </p>
         </div>
 
-        <div className="bg-white rounded-lg shadow-lg p-8">
-          <div className="flex gap-4 mb-6">
+        {/* メインカード */}
+        <div className="bg-white shadow-2xl p-8 border border-gray-200">
+          {/* タブ切り替え */}
+          <div className="flex gap-2 mb-8 bg-gray-100 p-1">
             <button
               onClick={() => setIsSignUp(false)}
-              className={`flex-1 py-2 px-4 rounded-lg font-medium transition-colors ${
+              className={`flex-1 py-3 px-4 font-semibold transition-all duration-300 ${
                 !isSignUp
-                  ? "bg-orange-600 text-white"
-                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                  ? "bg-white text-orange-600 shadow-md transform scale-105"
+                  : "text-gray-600 hover:text-gray-900"
               }`}
             >
               ログイン
             </button>
             <button
               onClick={() => setIsSignUp(true)}
-              className={`flex-1 py-2 px-4 rounded-lg font-medium transition-colors ${
+              className={`flex-1 py-3 px-4 font-semibold transition-all duration-300 ${
                 isSignUp
-                  ? "bg-orange-600 text-white"
-                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                  ? "bg-white text-orange-600 shadow-md transform scale-105"
+                  : "text-gray-600 hover:text-gray-900"
               }`}
             >
               新規登録
             </button>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-6">
             {error && (
-              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
-                {error}
+              <div className="bg-red-50 border-l-4 border-red-500 text-red-700 px-4 py-3 text-sm flex items-center gap-2 animate-shake">
+                <svg className="w-5 h-5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                </svg>
+                <span>{error}</span>
               </div>
             )}
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+            {/* メールアドレス入力 */}
+            <div className="space-y-2">
+              <label className="block text-sm font-semibold text-gray-700">
                 メールアドレス <span className="text-red-500">*</span>
               </label>
-              <input
-                type="email"
-                value={formData.email}
-                onChange={(e) => handleInputChange("email", e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
-              />
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 12a4 4 0 10-8 0 4 4 0 008 0zm0 0v1.5a2.5 2.5 0 005 0V12a9 9 0 10-9 9m4.5-1.206a8.959 8.959 0 01-4.5 1.207" />
+                  </svg>
+                </div>
+                <input
+                  type="email"
+                  value={formData.email}
+                  onChange={(e) => handleInputChange("email", e.target.value)}
+                  className="w-full pl-10 pr-4 py-3 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all duration-200 bg-gray-50 focus:bg-white"
+                  placeholder="your@email.com"
+                  autoComplete="email"
+                />
+              </div>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+            {/* パスワード入力 */}
+            <div className="space-y-2">
+              <label className="block text-sm font-semibold text-gray-700">
                 パスワード <span className="text-red-500">*</span>
               </label>
-              <input
-                type="password"
-                value={formData.password}
-                onChange={(e) => handleInputChange("password", e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
-              />
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                  </svg>
+                </div>
+                <input
+                  type={showPassword ? "text" : "password"}
+                  value={formData.password}
+                  onChange={(e) => handleInputChange("password", e.target.value)}
+                  className="w-full pl-10 pr-12 py-3 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all duration-200 bg-gray-50 focus:bg-white"
+                  placeholder="••••••••"
+                  autoComplete={isSignUp ? "new-password" : "current-password"}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  {showPassword ? (
+                    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                    </svg>
+                  ) : (
+                    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                    </svg>
+                  )}
+                </button>
+              </div>
             </div>
 
             {!isSignUp && (
@@ -194,7 +229,7 @@ export default function LoginPage() {
                 <button
                   type="button"
                   onClick={() => setShowPasswordReset(true)}
-                  className="text-sm text-orange-600 hover:text-orange-700"
+                  className="text-sm text-orange-600 hover:text-orange-700 font-medium transition-colors duration-200"
                 >
                   パスワードを忘れた場合
                 </button>
@@ -204,9 +239,32 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={isLoading || loading}
-              className="w-full py-3 bg-orange-600 text-white rounded-lg font-medium hover:bg-orange-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full py-3.5 bg-gradient-to-r from-orange-600 to-orange-500 text-white font-semibold hover:from-orange-700 hover:to-orange-600 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg hover:shadow-xl transform hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-2"
             >
-              {isLoading ? "処理中..." : isSignUp ? "新規登録" : "ログイン"}
+              {isLoading ? (
+                <>
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  <span>処理中...</span>
+                </>
+              ) : (
+                <>
+                  {isSignUp ? (
+                    <>
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+                      </svg>
+                      <span>新規登録</span>
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
+                      </svg>
+                      <span>ログイン</span>
+                    </>
+                  )}
+                </>
+              )}
             </button>
           </form>
         </div>
@@ -214,10 +272,10 @@ export default function LoginPage() {
 
       {/* パスワードリセットモーダル */}
       {showPasswordReset && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-bold text-gray-900">パスワードリセット</h2>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fadeIn">
+          <div className="bg-white shadow-2xl max-w-md w-full p-8 border border-gray-200 animate-slideUp">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-bold text-gray-900">パスワードリセット</h2>
               <button
                 onClick={() => {
                   setShowPasswordReset(false);
@@ -225,27 +283,17 @@ export default function LoginPage() {
                   setError("");
                   setSuccessMessage("");
                 }}
-                className="text-gray-400 hover:text-gray-600"
+                className="text-gray-400 hover:text-gray-600 transition-colors p-1 hover:bg-gray-100"
               >
-                <svg
-                  className="w-6 h-6"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M6 18L18 6M6 6l12 12"
-                  />
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
             </div>
 
-            <form onSubmit={handlePasswordReset} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+            <form onSubmit={handlePasswordReset} className="space-y-6">
+              <div className="space-y-2">
+                <label className="block text-sm font-semibold text-gray-700">
                   メールアドレス <span className="text-red-500">*</span>
                 </label>
                 <input
@@ -253,24 +301,28 @@ export default function LoginPage() {
                   value={resetEmail}
                   onChange={(e) => setResetEmail(e.target.value)}
                   placeholder="登録済みのメールアドレスを入力"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  className="w-full px-4 py-3 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all duration-200 bg-gray-50 focus:bg-white"
+                  autoComplete="email"
                   required
                 />
               </div>
 
               {error && (
-                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+                <div className="bg-red-50 border-l-4 border-red-500 text-red-700 px-4 py-3 text-sm">
                   {error}
                 </div>
               )}
 
               {successMessage && (
-                <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg text-sm">
-                  {successMessage}
+                <div className="bg-green-50 border-l-4 border-green-500 text-green-700 px-4 py-3 text-sm flex items-center gap-2">
+                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                  </svg>
+                  <span>{successMessage}</span>
                 </div>
               )}
 
-              <div className="flex gap-3">
+              <div className="flex gap-3 pt-2">
                 <button
                   type="button"
                   onClick={() => {
@@ -279,14 +331,14 @@ export default function LoginPage() {
                     setError("");
                     setSuccessMessage("");
                   }}
-                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
+                  className="flex-1 px-4 py-3 border-2 border-gray-300 text-gray-700 font-semibold hover:bg-gray-50 transition-all duration-200"
                 >
                   キャンセル
                 </button>
                 <button
                   type="submit"
                   disabled={isResetting}
-                  className="flex-1 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex-1 px-4 py-3 bg-gradient-to-r from-orange-600 to-orange-500 text-white font-semibold hover:from-orange-700 hover:to-orange-600 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
                 >
                   {isResetting ? "送信中..." : "送信"}
                 </button>

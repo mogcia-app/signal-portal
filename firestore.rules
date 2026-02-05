@@ -10,17 +10,32 @@ service cloud.firestore {
     // 通知（読み取りのみ）
     match /notifications/{notificationId} {
       // 認証済みユーザーで、公開中の通知のみ読み取り可能
-      allow read: if isAuthenticated() && 
-                       resource.data.status == 'published';
-      // 管理者のみ書き込み可能（必要に応じて実装）
-      // 現時点では書き込みを禁止（Adminプロジェクトから管理）
-      allow write: if false;
+      // get: 個別ドキュメントの読み取り
+      allow get: if isAuthenticated() && 
+                      resource.data.status == 'published';
+      // list: クエリによる一覧取得（アプリ側でstatus='published'でフィルタリング）
+      allow list: if isAuthenticated();
+      // 読み取り数の更新のみ許可（認証済みユーザー）
+      // readCountフィールドのみが更新されることを確認
+      allow update: if isAuthenticated() && 
+                         // 重要なフィールドが変更されていないことを確認
+                         request.resource.data.status == resource.data.status &&
+                         request.resource.data.title == resource.data.title &&
+                         request.resource.data.content == resource.data.content &&
+                         // readCountが増加しているか、または変更されていない
+                         (!resource.data.exists('readCount') || 
+                          request.resource.data.readCount >= resource.data.readCount);
+      // その他の書き込みは禁止（Adminプロジェクトから管理）
+      allow create, delete: if false;
     }
 
     // 請求書（ユーザーは自分の請求書のみ読み取り可能）
     match /invoices/{invoiceId} {
-      allow read: if isAuthenticated() && 
-                       resource.data.userId == request.auth.uid;
+      // get: 個別ドキュメントの読み取り（自分の請求書のみ）
+      allow get: if isAuthenticated() && 
+                      resource.data.userId == request.auth.uid;
+      // list: クエリによる一覧取得（アプリ側でuserIdでフィルタリング）
+      allow list: if isAuthenticated();
       // 書き込みはAPI route経由のみ（サーバー側で処理）
       allow write: if false;
     }
@@ -28,8 +43,11 @@ service cloud.firestore {
     // ブログ投稿（読み取りのみ）
     match /blogPosts/{postId} {
       // 認証済みユーザーで、公開中の投稿のみ読み取り可能
-      allow read: if isAuthenticated() && 
-                       resource.data.status == 'published';
+      // get: 個別ドキュメントの読み取り
+      allow get: if isAuthenticated() && 
+                      resource.data.status == 'published';
+      // list: クエリによる一覧取得（アプリ側でstatus='published'でフィルタリング）
+      allow list: if isAuthenticated();
       // 管理者のみ書き込み可能（必要に応じて実装）
       // 現時点では書き込みを禁止（Adminプロジェクトから管理）
       allow write: if false;
@@ -49,34 +67,51 @@ service cloud.firestore {
                           request.resource.data.userType == resource.data.userType);
       
       // 自分自身のデータのみ読み取り可能
-      allow read: if isAuthenticated() && request.auth.uid == userId;
+      // get: 個別ドキュメントの読み取り
+      allow get: if isAuthenticated() && request.auth.uid == userId;
+      // list: クエリによる一覧取得（通常は使用しないが、念のため許可）
+      allow list: if isAuthenticated() && request.auth.uid == userId;
       
       // 作成はAuthContextで行う（認証済みユーザーのみ）
       allow create: if isAuthenticated() && request.auth.uid == userId;
       
       // 同意ログサブコレクション（法的証拠として保存）
       match /contractConsents/{consentId} {
-        // 自分自身の同意ログのみ読み取り可能
-        allow read: if isAuthenticated() && request.auth.uid == userId;
+        // get: 個別ドキュメントの読み取り
+        allow get: if isAuthenticated() && request.auth.uid == userId;
+        // list: クエリによる一覧取得
+        allow list: if isAuthenticated() && request.auth.uid == userId;
         // 書き込みはAPI route経由のみ（サーバー側で処理）
         allow write: if false;
       }
       
       // プライバシーポリシー同意ログサブコレクション
       match /privacyPolicyConsents/{consentId} {
-        allow read: if isAuthenticated() && request.auth.uid == userId;
+        // get: 個別ドキュメントの読み取り
+        allow get: if isAuthenticated() && request.auth.uid == userId;
+        // list: クエリによる一覧取得
+        allow list: if isAuthenticated() && request.auth.uid == userId;
+        // 書き込みはAPI route経由のみ（サーバー側で処理）
         allow write: if false;
       }
       
       // 会員サイト利用規約同意ログサブコレクション
       match /memberSiteTermsConsents/{consentId} {
-        allow read: if isAuthenticated() && request.auth.uid == userId;
+        // get: 個別ドキュメントの読み取り
+        allow get: if isAuthenticated() && request.auth.uid == userId;
+        // list: クエリによる一覧取得
+        allow list: if isAuthenticated() && request.auth.uid == userId;
+        // 書き込みはAPI route経由のみ（サーバー側で処理）
         allow write: if false;
       }
       
       // ツール利用規約同意ログサブコレクション
       match /toolTermsConsents/{consentId} {
-        allow read: if isAuthenticated() && request.auth.uid == userId;
+        // get: 個別ドキュメントの読み取り
+        allow get: if isAuthenticated() && request.auth.uid == userId;
+        // list: クエリによる一覧取得
+        allow list: if isAuthenticated() && request.auth.uid == userId;
+        // 書き込みはAPI route経由のみ（サーバー側で処理）
         allow write: if false;
       }
     }

@@ -9,7 +9,7 @@ import { useAuth } from "@/contexts/AuthContext";
 
 const plans: { [key: string]: { name: string; price: number; description: string } } = {
   light: { 
-    name: "ライト", 
+    name: "ベーシック", 
     price: 15000,
     description: "投稿作成をAIで効率化。まずは「続ける」ための基本プラン。週次スケジュール設定、投稿文・ハッシュタグ生成、コメント返信AIなど、日々の投稿作業をまとめてサポート。"
   },
@@ -99,33 +99,12 @@ function InitialInvoiceContent() {
           // Adminで変更されたプランを反映するため、planTierとmonthlyFeeの組み合わせを最優先
           let planId = planIdFromUrl;
           if (!planId) {
-            // まず planTier と monthlyFee の組み合わせで判定（Admin側は松竹梅プランを使用）
-            const planTier = data.planTier; // 'ume' | 'take' | 'matsu'
+            // monthlyFeeから判定
             const monthlyFee = data.billingInfo?.monthlyFee;
             
-            console.log('planTier:', planTier);
             console.log('billingInfo.monthlyFee:', monthlyFee);
             
-            if (planTier && monthlyFee) {
-              // 松竹梅プラン + 料金の組み合わせで判定
-              if (planTier === 'ume' && monthlyFee === 15000) {
-                planId = 'light';
-              } else if (planTier === 'take' && monthlyFee === 30000) {
-                planId = 'standard';
-              } else if (planTier === 'matsu' && monthlyFee === 60000) {
-                planId = 'professional';
-              } else {
-                // 組み合わせが合わない場合は料金のみで判定
-                if (monthlyFee === 15000) {
-                  planId = 'light';
-                } else if (monthlyFee === 30000) {
-                  planId = 'standard';
-                } else if (monthlyFee === 60000) {
-                  planId = 'professional';
-                }
-              }
-              console.log('planTier + monthlyFee から判定した planId:', planId);
-            } else if (monthlyFee) {
+            if (monthlyFee) {
               // monthlyFee のみから判定
               console.log('billingInfo.monthlyFee から判定:', monthlyFee);
               if (monthlyFee === 15000) {
@@ -354,13 +333,13 @@ function InitialInvoiceContent() {
     <AuthGuard requireAuth>
       <div className="min-h-screen bg-gray-50 py-12 px-4">
         <div className="max-w-3xl mx-auto">
-          {/* 請求書タイトル */}
-          <div className="mb-12 text-center">
-            <h1 className="text-4xl font-light text-gray-900 tracking-wide mb-2">請求書</h1>
-            <div className="h-px w-24 bg-gray-300 mx-auto"></div>
-          </div>
-
           <div className="bg-white shadow-sm border border-gray-200 p-12 mb-8">
+            {/* 請求書タイトル */}
+            <div className="mb-12 text-center">
+              <h1 className="text-4xl font-light text-gray-900 tracking-wide mb-2">請求書</h1>
+              <div className="h-px w-24 bg-gray-300 mx-auto"></div>
+            </div>
+
             {/* 請求書ヘッダー */}
             <div className="mb-12 flex justify-between items-start border-b border-gray-200 pb-8">
               <div className="space-y-1">
@@ -384,7 +363,7 @@ function InitialInvoiceContent() {
                     value={invoiceDate}
                     onChange={(e) => setInvoiceDate(e.target.value)}
                     disabled={datesSaved}
-                    className="text-sm text-gray-900 border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-1 focus:ring-gray-400"
+                    className="text-sm text-gray-900 border border-gray-300  px-3 py-2 focus:outline-none focus:ring-1 focus:ring-gray-400"
                   />
                 )}
               </div>
@@ -486,12 +465,12 @@ function InitialInvoiceContent() {
                           onChange={(e) => setSelectedDueDate(e.target.value)}
                           min={getTodayDate()}
                           disabled={datesSaved}
-                          className="text-sm text-gray-900 border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-1 focus:ring-gray-400"
+                          className="text-sm text-gray-900 border border-gray-300  px-3 py-2 focus:outline-none focus:ring-1 focus:ring-gray-400"
                         />
                         <button
                           onClick={handleConfirmDueDate}
                           disabled={!selectedDueDate || datesSaved}
-                          className={`px-4 py-2 text-xs font-medium rounded transition-colors ${
+                          className={`px-4 py-2 text-xs font-medium  transition-colors ${
                             selectedDueDate && !datesSaved
                               ? "bg-gray-900 text-white hover:bg-gray-800"
                               : "bg-gray-200 text-gray-400 cursor-not-allowed"
@@ -512,7 +491,7 @@ function InitialInvoiceContent() {
                   <div className="mt-6 flex justify-end">
                     <button
                       onClick={handleSaveDates}
-                      className="px-6 py-2 bg-gray-900 text-white rounded hover:bg-gray-800 transition-colors text-sm font-medium"
+                      className="px-6 py-2 bg-gray-900 text-white  hover:bg-gray-800 transition-colors text-sm font-medium"
                     >
                       保存
                     </button>
@@ -528,21 +507,22 @@ function InitialInvoiceContent() {
                 本サービスの利用開始は、初期費用および当社が指定する初回利用料金の入金確認後とします。
               </p>
             </div>
-          </div>
 
-          <div className="flex justify-end gap-4">
-            <button
-              onClick={() => router.back()}
-              className="px-8 py-3 border border-gray-300 rounded text-gray-700 hover:bg-white transition-colors text-sm font-medium"
-            >
-              戻る
-            </button>
-            <button
-              onClick={handleNext}
-              className="px-8 py-3 bg-gray-900 text-white rounded hover:bg-gray-800 transition-colors text-sm font-medium"
-            >
-              次へ
-            </button>
+            {/* ボタン */}
+            <div className="flex justify-end gap-4 mt-8 pt-6 border-t border-gray-200">
+              <button
+                onClick={() => router.back()}
+                className="px-8 py-3 border border-gray-300 text-gray-700 hover:bg-white transition-colors text-sm font-medium"
+              >
+                戻る
+              </button>
+              <button
+                onClick={handleNext}
+                className="px-8 py-3 bg-orange-600 text-white hover:bg-orange-700 transition-colors text-sm font-medium"
+              >
+                次へ
+              </button>
+            </div>
           </div>
         </div>
       </div>

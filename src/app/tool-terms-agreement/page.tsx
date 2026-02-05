@@ -7,6 +7,7 @@ import { doc, getDoc, collection, query, orderBy, limit, getDocs } from "firebas
 import { db } from "@/lib/firebase";
 import AuthGuard from "@/components/AuthGuard";
 import { useAuth } from "@/contexts/AuthContext";
+import { checkAllAgreements, getNextAgreementPage } from "@/lib/agreementCheck";
 
 export default function ToolTermsAgreementPage() {
   const router = useRouter();
@@ -25,6 +26,20 @@ export default function ToolTermsAgreementPage() {
       }
 
       try {
+        // まず、すべての同意状態をチェックして、既に同意済みの場合は即座にリダイレクト
+        const status = await checkAllAgreements(userProfile.id);
+        const nextPage = getNextAgreementPage(status);
+        
+        // Signal.ツール利用規約が既に同意済みで、次のページが別のページの場合は即座にリダイレクト
+        if (status.toolTermsAgreement && nextPage && nextPage !== "/tool-terms-agreement") {
+          router.replace(nextPage);
+          return;
+        }
+        if (status.toolTermsAgreement && nextPage === null) {
+          router.replace("/home");
+          return;
+        }
+
         const userDocRef = doc(db, "users", userProfile.id);
         const userDoc = await getDoc(userDocRef);
 
@@ -128,6 +143,26 @@ export default function ToolTermsAgreementPage() {
     loadAgreementStatus();
   }, [userProfile]);
 
+  // 同意済みの場合、/homeにリダイレクト
+  useEffect(() => {
+    const redirectIfAgreed = async () => {
+      if (!userProfile?.id || loading) return;
+      
+      if (isAgreedPersisted) {
+        // すべての同意状態をチェック
+        const status = await checkAllAgreements(userProfile.id);
+        const nextPage = getNextAgreementPage(status);
+        
+        if (nextPage === null) {
+          // すべて同意済みの場合は/homeにリダイレクト
+          router.push("/home");
+        }
+      }
+    };
+
+    redirectIfAgreed();
+  }, [isAgreedPersisted, userProfile, loading, router]);
+
   const handleAgreementChange = async (checked: boolean) => {
     // 既に保存済みの場合は変更不可
     if (isAgreedPersisted) {
@@ -206,34 +241,35 @@ export default function ToolTermsAgreementPage() {
 
   return (
     <AuthGuard requireAuth>
-      <div className="flex min-h-screen bg-gray-50 items-center justify-center p-4">
-      <div className="w-full max-w-3xl">
-        <div className="text-center mb-8">
-          <h1 className="text-2xl font-bold text-gray-900">
-            <span className="font-bold text-gray-900">Signal</span><span style={{ color: '#ff8a15' }}>.</span>ツール利用規約への同意
-          </h1>
-          <p className="text-sm text-gray-600 mt-2">
-            <span className="font-bold text-gray-900">Signal</span><span style={{ color: '#ff8a15' }}>.</span>ツール（SNS投稿作成・分析ツール）をご利用いただくための規約にご同意ください
-          </p>
-        </div>
+      <div className="min-h-screen bg-gray-50 py-12 px-4">
+        <div className="max-w-3xl mx-auto">
+          <div className="bg-white shadow-sm border border-gray-200 p-12 mb-8">
+            <div className="text-center mb-8">
+              <h1 className="text-4xl font-light text-gray-900 tracking-wide mb-2">
+                <span className="font-bold text-gray-900">Signal</span><span style={{ color: '#ff8a15' }}>.</span>ツール利用規約への同意
+              </h1>
+              <div className="h-px w-24 bg-gray-300 mx-auto mb-4"></div>
+              <p className="text-sm text-gray-600">
+                <span className="font-bold text-gray-900">Signal</span><span style={{ color: '#ff8a15' }}>.</span>ツール（SNS投稿作成・分析ツール）をご利用いただくための規約にご同意ください
+              </p>
+            </div>
 
-        <div className="bg-white rounded-lg shadow-lg p-8 mb-6">
-          <div className="h-96 overflow-y-auto border border-gray-200 rounded-lg p-6 mb-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">
-              Signal. ツール利用規約
-            </h2>
-            <div className="text-sm text-gray-700 space-y-4">
-              <div>
-                <h3 className="font-semibold mb-2">第1条（適用）</h3>
+            <div className="max-h-[600px] overflow-y-auto border-2 border-gray-300 p-6 mb-6 bg-gray-50">
+              <h2 className="text-lg font-semibold text-gray-900 mb-4">
+                Signal. ツール利用規約
+              </h2>
+              <div className="text-sm text-gray-700 space-y-4">
+                <div>
+                  <h3 className="font-semibold mb-2">第1条（適用）</h3>
                 <ol className="list-decimal list-inside ml-2 space-y-2">
                   <li>本規約は、株式会社MOGCIA（以下「当社」といいます。）が提供する Signal.ツール（以下「本ツール」といいます。）の利用条件を定めるものです。</li>
                   <li>本ツールの利用にあたっては、当社が別途定める「Signal.会員サイト利用規約」（以下「会員サイト規約」といいます。）も併せて適用されるものとします。</li>
                   <li>本規約と会員サイト規約の内容に相違がある場合は、本ツールの利用に関しては本規約が優先して適用されるものとします。</li>
                 </ol>
-              </div>
+                </div>
 
-              <div>
-                <h3 className="font-semibold mb-2">第2条（本ツールの内容）</h3>
+                <div>
+                  <h3 className="font-semibold mb-2">第2条（本ツールの内容）</h3>
                 <p>
                   本ツールは、以下の機能を提供します。
                 </p>
@@ -248,28 +284,28 @@ export default function ToolTermsAgreementPage() {
                 <p className="mt-3 text-xs text-gray-600">
                   ※ 利用可能な機能は、ユーザーが契約するプランにより制限される場合があります。
                 </p>
-              </div>
+                </div>
 
-              <div>
-                <h3 className="font-semibold mb-2">第3条（利用開始および同意）</h3>
+                <div>
+                  <h3 className="font-semibold mb-2">第3条（利用開始および同意）</h3>
                 <ol className="list-decimal list-inside ml-2 space-y-2">
                   <li>ユーザーは、会員サイトでの利用登録完了後、本ツールに初めてアクセスした時点で、本規約の内容に同意したものとみなされます。</li>
                   <li>ユーザーが本ツールを利用した場合、本規約に同意したものと推定されます。</li>
                 </ol>
-              </div>
+                </div>
 
-              <div>
-                <h3 className="font-semibold mb-2">第4条（生成コンテンツの取扱い）</h3>
+                <div>
+                  <h3 className="font-semibold mb-2">第4条（生成コンテンツの取扱い）</h3>
                 <ol className="list-decimal list-inside ml-2 space-y-2">
                   <li>本ツールにより生成された投稿文、ハッシュタグ、分析結果、画像その他のアウトプット（以下「生成コンテンツ」といいます。）の利用権は、ユーザーに帰属します。</li>
                   <li>ユーザーは、生成コンテンツを自己の責任において確認・編集したうえで利用するものとします。</li>
                   <li>当社は、生成コンテンツが第三者の権利を侵害しないこと、正確性、有用性、適法性を有することについて一切保証しません。</li>
                   <li>生成コンテンツの利用によりユーザーまたは第三者に生じた損害について、当社は一切の責任を負いません。</li>
                 </ol>
-              </div>
+                </div>
 
-              <div>
-                <h3 className="font-semibold mb-2">第5条（ユーザーデータの取扱い）</h3>
+                <div>
+                  <h3 className="font-semibold mb-2">第5条（ユーザーデータの取扱い）</h3>
                 <ol className="list-decimal list-inside ml-2 space-y-2">
                   <li>ユーザーが本ツールに入力または登録したデータ（投稿内容、KPI設定、分析対象データ等を含みます。以下「ユーザーデータ」といいます。）の管理責任は、ユーザー自身に帰属します。</li>
                   <li>当社は、以下の目的の範囲内で、ユーザーデータを利用することができるものとします。
@@ -280,10 +316,10 @@ export default function ToolTermsAgreementPage() {
                     </ul>
                   </li>
                 </ol>
-              </div>
+                </div>
 
-              <div>
-                <h3 className="font-semibold mb-2">第6条（禁止事項）</h3>
+                <div>
+                  <h3 className="font-semibold mb-2">第6条（禁止事項）</h3>
                 <p>
                   ユーザーは、本ツールの利用にあたり、以下の行為を行ってはなりません。
                 </p>
@@ -301,10 +337,10 @@ export default function ToolTermsAgreementPage() {
                   <li>同業者または競合目的での調査、模倣、解析、検証を目的として本ツールを利用する行為</li>
                   <li>その他、当社が不適切と判断する行為</li>
                 </ol>
-              </div>
+                </div>
 
-              <div>
-                <h3 className="font-semibold mb-2">第7条（利用制限および登録抹消）</h3>
+                <div>
+                  <h3 className="font-semibold mb-2">第7条（利用制限および登録抹消）</h3>
                 <ol className="list-decimal list-inside ml-2 space-y-2">
                   <li>当社は、以下のいずれかに該当する場合、事前の通知なく、本ツールの全部または一部へのアクセス制限、利用停止、またはユーザー登録の抹消を行うことができます。
                     <ul className="list-disc list-inside ml-4 mt-2 space-y-1">
@@ -322,10 +358,10 @@ export default function ToolTermsAgreementPage() {
                   <li>本ツールの不正利用、濫用、または不当利用が認められた場合</li>
                   <li>その他、当社が本ツールの利用を不適切と判断した場合</li>
                 </ol>
-              </div>
+                </div>
 
-              <div>
-                <h3 className="font-semibold mb-2">第8条（保証の否認および免責）</h3>
+                <div>
+                  <h3 className="font-semibold mb-2">第8条（保証の否認および免責）</h3>
                 <ol className="list-decimal list-inside ml-2 space-y-2">
                   <li>当社は、本ツールについて、事実上または法律上の瑕疵（安全性、信頼性、正確性、完全性、有効性、特定目的への適合性、セキュリティ、エラー、バグ、権利侵害等）がないことを明示的にも黙示的にも保証しません。</li>
                   <li>本ツールが生成するコンテンツ、分析結果、提案内容について、その成果、効果、正確性、完全性、有用性を保証するものではありません。</li>
@@ -333,91 +369,92 @@ export default function ToolTermsAgreementPage() {
                   <li>当社は、必要に応じて、アクセスログ、IPアドレス、端末情報等を調査し、当該事案の原因究明および再発防止措置を講じることがあります。</li>
                   <li>ユーザーの故意または重大な過失により当社に損害が生じた場合、当社は当該ユーザーに対し、損害賠償を請求できるものとします。</li>
                 </ol>
-              </div>
+                </div>
 
-              <div>
-                <h3 className="font-semibold mb-2">第9条（サービス内容の変更・終了）</h3>
-                <p>
-                  当社は、事前の通知なく、本ツールの内容を変更、追加、停止、または終了することができます。これによりユーザーに生じた損害について、当社は一切の責任を負いません。
-                </p>
-              </div>
+                <div>
+                  <h3 className="font-semibold mb-2">第9条（サービス内容の変更・終了）</h3>
+                  <p>
+                    当社は、事前の通知なく、本ツールの内容を変更、追加、停止、または終了することができます。これによりユーザーに生じた損害について、当社は一切の責任を負いません。
+                  </p>
+                </div>
 
-              <div>
-                <h3 className="font-semibold mb-2">第10条（規約の変更）</h3>
+                <div>
+                  <h3 className="font-semibold mb-2">第10条（規約の変更）</h3>
                 <ol className="list-decimal list-inside ml-2 space-y-2">
                   <li>当社は、法令の変更、サービス内容の変更その他必要と判断した場合、ユーザーの個別の同意を得ることなく、本規約を変更することができます。</li>
                   <li>変更後の本規約は、本ツールまたは本ウェブサイト上に掲載した時点から効力を生じるものとします。</li>
                 </ol>
-              </div>
+                </div>
 
-              <div>
-                <h3 className="font-semibold mb-2">第11条（準拠法および管轄）</h3>
-                <p>
-                  本規約は日本法を準拠法とし、本ツールに関して生じた紛争については、福岡地方裁判所を第一審の専属的合意管轄裁判所とします。
-                </p>
-              </div>
+                <div>
+                  <h3 className="font-semibold mb-2">第11条（準拠法および管轄）</h3>
+                  <p>
+                    本規約は日本法を準拠法とし、本ツールに関して生じた紛争については、福岡地方裁判所を第一審の専属的合意管轄裁判所とします。
+                  </p>
+                </div>
 
-              <div className="mt-6 pt-4 border-t border-gray-200">
-                <p className="text-xs text-gray-600 italic">
-                  ※ 本規約は AI・SaaS・分析ツールに特化した内容として整理しています。
-                </p>
+                <div className="mt-6 pt-4 border-t border-gray-200">
+                  <p className="text-xs text-gray-600 italic">
+                    ※ 本規約は AI・SaaS・分析ツールに特化した内容として整理しています。
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="border-t border-gray-200 pt-6 mt-8">
+              {isAgreedPersisted ? (
+                <div className="bg-gray-100 border-2 border-black p-4 mb-4">
+                  <p className="text-sm text-red-800 font-bold flex items-center gap-2">
+                    <span className="inline-flex items-center justify-center w-5 h-5 border-2 border-red-800 bg-white">
+                      <svg className="w-3 h-3 text-red-800" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                      </svg>
+                    </span>
+                    Signal.ツール利用規約に同意済みです。同意日: {agreedDate}
+                  </p>
+                </div>
+              ) : (
+              <label className="flex items-start gap-3 cursor-pointer mb-4">
+                <input
+                  type="checkbox"
+                  id="toolAgree"
+                  checked={agreed}
+                  onChange={(e) => handleAgreementChange(e.target.checked)}
+                  disabled={isAgreedPersisted}
+                  className={`mt-1 w-5 h-5 text-orange-600 border-gray-300 focus:ring-orange-500 ${
+                    isAgreedPersisted ? "opacity-60 cursor-not-allowed" : ""
+                  }`}
+                />
+                <span className={`text-sm text-gray-700 ${
+                  isAgreedPersisted ? "cursor-default" : ""
+                }`}>
+                  Signal.ツール利用規約に同意します
+                </span>
+              </label>
+              )}
+
+              <div className="flex justify-end gap-4">
+                <button
+                  onClick={() => router.back()}
+                  className="px-6 py-2 border border-gray-300 text-gray-700 hover:bg-gray-50 transition-colors"
+                >
+                  戻る
+                </button>
+                <button
+                  onClick={handleNext}
+                  disabled={!agreed && !isAgreedPersisted}
+                  className={`px-6 py-2 font-medium transition-colors ${
+                    agreed || isAgreedPersisted
+                      ? "bg-orange-600 text-white hover:bg-orange-700"
+                      : "bg-gray-300 text-gray-500 cursor-not-allowed"
+                  }`}
+                >
+                  次へ
+                </button>
               </div>
             </div>
           </div>
-
-          <div className="flex items-start gap-3">
-            <input
-              type="checkbox"
-              id="toolAgree"
-              checked={agreed}
-              onChange={(e) => handleAgreementChange(e.target.checked)}
-              disabled={isAgreedPersisted}
-              className={`mt-1 w-5 h-5 text-orange-600 border-gray-300 rounded focus:ring-orange-500 ${
-                isAgreedPersisted ? "opacity-60 cursor-not-allowed" : ""
-              }`}
-            />
-            <label 
-              htmlFor="toolAgree" 
-              className={`text-sm text-gray-700 ${
-                isAgreedPersisted ? "cursor-default" : "cursor-pointer"
-              }`}
-            >
-              {isAgreedPersisted ? (
-                <>
-                  同意済み
-                  {agreedDate && (
-                    <span className="ml-2 text-xs text-gray-500">
-                      （同意日: {agreedDate}）
-                    </span>
-                  )}
-                </>
-              ) : (
-                "Signal.ツール利用規約に同意します"
-              )}
-            </label>
-          </div>
         </div>
-
-        <div className="flex justify-end gap-4">
-          <button
-            onClick={() => router.back()}
-            className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
-          >
-            戻る
-          </button>
-          <button
-            onClick={handleNext}
-            disabled={!agreed && !isAgreedPersisted}
-            className={`px-6 py-2 rounded-lg font-medium transition-colors ${
-              agreed || isAgreedPersisted
-                ? "bg-orange-600 text-white hover:bg-orange-700"
-                : "bg-gray-300 text-gray-500 cursor-not-allowed"
-            }`}
-          >
-            次へ
-          </button>
-        </div>
-      </div>
       </div>
     </AuthGuard>
   );

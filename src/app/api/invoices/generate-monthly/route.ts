@@ -3,7 +3,7 @@ import { collection, query, where, getDocs, addDoc, serverTimestamp, doc, getDoc
 import { db } from "@/lib/firebase";
 
 const plans: { [key: string]: { name: string; price: number } } = {
-  light: { name: "ライト", price: 15000 },
+  light: { name: "ベーシック", price: 15000 },
   standard: { name: "スタンダード", price: 30000 },
   professional: { name: "プロ", price: 60000 },
 };
@@ -72,22 +72,9 @@ export async function POST(request: NextRequest) {
 
       // プランIDの取得
       let planId = null;
-      const planTier = userData.planTier;
       const monthlyFee = userData.billingInfo?.monthlyFee;
 
-      if (planTier && monthlyFee) {
-        if (planTier === 'ume' && monthlyFee === 15000) {
-          planId = 'light';
-        } else if (planTier === 'take' && monthlyFee === 30000) {
-          planId = 'standard';
-        } else if (planTier === 'matsu' && monthlyFee === 60000) {
-          planId = 'professional';
-        } else {
-          if (monthlyFee === 15000) planId = 'light';
-          else if (monthlyFee === 30000) planId = 'standard';
-          else if (monthlyFee === 60000) planId = 'professional';
-        }
-      } else if (monthlyFee) {
+      if (monthlyFee) {
         if (monthlyFee === 15000) planId = 'light';
         else if (monthlyFee === 30000) planId = 'standard';
         else if (monthlyFee === 60000) planId = 'professional';

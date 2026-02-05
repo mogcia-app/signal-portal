@@ -3,7 +3,7 @@ import { collection, addDoc, serverTimestamp, query, where, getDocs, doc, getDoc
 import { db } from "@/lib/firebase";
 
 const plans: { [key: string]: { name: string; price: number } } = {
-  light: { name: "ライト", price: 15000 },
+  light: { name: "ベーシック", price: 15000 },
   standard: { name: "スタンダード", price: 30000 },
   professional: { name: "プロ", price: 60000 },
 };

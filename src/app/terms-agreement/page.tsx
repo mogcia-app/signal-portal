@@ -7,6 +7,7 @@ import { doc, getDoc, collection, query, orderBy, limit, getDocs } from "firebas
 import { db } from "@/lib/firebase";
 import AuthGuard from "@/components/AuthGuard";
 import { useAuth } from "@/contexts/AuthContext";
+import { checkAllAgreements, getNextAgreementPage } from "@/lib/agreementCheck";
 
 export default function TermsAgreementPage() {
   const router = useRouter();
@@ -25,6 +26,20 @@ export default function TermsAgreementPage() {
       }
 
       try {
+        // まず、すべての同意状態をチェックして、既に同意済みの場合は即座にリダイレクト
+        const status = await checkAllAgreements(userProfile.id);
+        const nextPage = getNextAgreementPage(status);
+        
+        // 会員サイト利用規約が既に同意済みで、次のページが別のページの場合は即座にリダイレクト
+        if (status.termsAgreement && nextPage && nextPage !== "/terms-agreement") {
+          router.replace(nextPage);
+          return;
+        }
+        if (status.termsAgreement && nextPage === null) {
+          router.replace("/home");
+          return;
+        }
+
         const userDocRef = doc(db, "users", userProfile.id);
         const userDoc = await getDoc(userDocRef);
 
@@ -136,6 +151,29 @@ export default function TermsAgreementPage() {
     loadAgreementStatus();
   }, [userProfile]);
 
+  // 同意済みの場合、次のページにリダイレクト
+  useEffect(() => {
+    const redirectIfAgreed = async () => {
+      if (!userProfile?.id || loading) return;
+      
+      if (isAgreedPersisted) {
+        // すべての同意状態をチェック
+        const status = await checkAllAgreements(userProfile.id);
+        const nextPage = getNextAgreementPage(status);
+        
+        if (nextPage === null) {
+          // すべて同意済みの場合は/homeにリダイレクト
+          router.push("/home");
+        } else if (nextPage !== "/terms-agreement") {
+          // 次の同意ページにリダイレクト
+          router.push(nextPage);
+        }
+      }
+    };
+
+    redirectIfAgreed();
+  }, [isAgreedPersisted, userProfile, loading, router]);
+
   const handleAgreementChange = async (checked: boolean) => {
     // 既に保存済みの場合は変更不可
     if (isAgreedPersisted) {
@@ -213,23 +251,22 @@ export default function TermsAgreementPage() {
 
   return (
     <AuthGuard requireAuth>
-      <div className="flex min-h-screen bg-gray-50 items-center justify-center p-4">
-      <div className="w-full max-w-3xl">
-        <div className="text-center mb-8">
-          <h1 className="text-2xl font-bold text-gray-900">
-            会員サイト利用規約への同意
-          </h1>
-          <p className="text-sm text-gray-600 mt-2">
-            <span className="font-bold text-gray-900">Signal</span><span style={{ color: '#ff8a15' }}>.</span>会員サイトをご利用いただくための規約にご同意ください
-          </p>
-        </div>
+      <div className="min-h-screen bg-gray-50 py-12 px-4">
+        <div className="max-w-3xl mx-auto">
+          <div className="bg-white shadow-sm border border-gray-200 p-12 mb-8">
+            <div className="text-center mb-8">
+              <h1 className="text-4xl font-light text-gray-900 tracking-wide mb-2">会員サイト利用規約への同意</h1>
+              <div className="h-px w-24 bg-gray-300 mx-auto mb-4"></div>
+              <p className="text-sm text-gray-600">
+                <span className="font-bold text-gray-900">Signal</span><span style={{ color: '#ff8a15' }}>.</span>会員サイトをご利用いただくための規約にご同意ください
+              </p>
+            </div>
 
-        <div className="bg-white rounded-lg shadow-lg p-8 mb-6">
-          <div className="h-96 overflow-y-auto border border-gray-200 rounded-lg p-6 mb-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">
-              Signal. 会員サイト利用規約
-            </h2>
-            <div className="text-sm text-gray-700 space-y-4">
+            <div className="max-h-[600px] overflow-y-auto border-2 border-gray-300 p-6 mb-6 bg-gray-50">
+              <h2 className="text-lg font-semibold text-gray-900 mb-4">
+                Signal. 会員サイト利用規約
+              </h2>
+              <div className="text-sm text-gray-700 space-y-4">
               <div>
                 <h3 className="font-semibold mb-2">第1条（適用）</h3>
                 <p>
@@ -375,72 +412,66 @@ export default function TermsAgreementPage() {
                   本規約は日本法を準拠法とし、本サービスに関して生じた紛争については、福岡地方裁判所を第一審の専属的合意管轄裁判所とします。
                 </p>
               </div>
+              </div>
             </div>
-          </div>
 
-          <div className="flex items-start gap-3">
-            {isAgreedPersisted ? (
-              <div className="flex items-center gap-2">
-                <label htmlFor="agree" className="text-sm text-gray-700">
-                  <Link href="/terms" className="text-orange-600 hover:text-orange-700 underline">
-                    会員サイト利用規約
-                  </Link>
-                  <span className="ml-2 text-green-600 font-medium">に同意済みです。</span>
-                  {agreedDate && (
-                    <span className="ml-2 text-sm text-gray-600">
-                      同意日 {agreedDate}
-                    </span>
-                  )}
-                </label>
+            <div className="border-t border-gray-200 pt-6 mt-8">
+              {isAgreedPersisted ? (
+              <div className="bg-gray-100 border-2 border-black p-4 mb-4">
+                <p className="text-sm text-red-800 font-bold flex items-center gap-2">
+                  <span className="inline-flex items-center justify-center w-5 h-5 border-2 border-red-800 bg-white">
+                    <svg className="w-3 h-3 text-red-800" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                    </svg>
+                  </span>
+                  会員サイト利用規約に同意済みです。同意日: {agreedDate}
+                </p>
               </div>
             ) : (
-              <>
+              <label className="flex items-start gap-3 cursor-pointer mb-4">
                 <input
                   type="checkbox"
                   id="agree"
                   checked={agreed}
                   onChange={(e) => handleAgreementChange(e.target.checked)}
                   disabled={isAgreedPersisted}
-                  className={`mt-1 w-5 h-5 text-orange-600 border-gray-300 rounded focus:ring-orange-500 ${
+                  className={`mt-1 w-5 h-5 text-orange-600 border-gray-300 focus:ring-orange-500 ${
                     isAgreedPersisted ? "opacity-60 cursor-not-allowed" : ""
                   }`}
                 />
-                <label 
-                  htmlFor="agree" 
-                  className={`text-sm text-gray-700 ${
-                    isAgreedPersisted ? "cursor-default" : "cursor-pointer"
-                  }`}
-                >
+                <span className={`text-sm text-gray-700 ${
+                  isAgreedPersisted ? "cursor-default" : ""
+                }`}>
                   <Link href="/terms" className="text-orange-600 hover:text-orange-700 underline">
                     会員サイト利用規約
                   </Link>
                   に同意します
-                </label>
-              </>
-            )}
+                </span>
+              </label>
+              )}
+
+              <div className="flex justify-end gap-4">
+              <button
+                onClick={() => router.back()}
+                className="px-6 py-2 border border-gray-300 text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                戻る
+              </button>
+              <button
+                onClick={handleNext}
+                disabled={!agreed && !isAgreedPersisted}
+                className={`px-6 py-2 font-medium transition-colors ${
+                  agreed || isAgreedPersisted
+                    ? "bg-orange-600 text-white hover:bg-orange-700"
+                    : "bg-gray-300 text-gray-500 cursor-not-allowed"
+                }`}
+              >
+                次へ
+              </button>
+              </div>
+            </div>
           </div>
         </div>
-
-        <div className="flex justify-end gap-4">
-          <button
-            onClick={() => router.back()}
-            className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
-          >
-            戻る
-          </button>
-          <button
-            onClick={handleNext}
-            disabled={!agreed && !isAgreedPersisted}
-            className={`px-6 py-2 rounded-lg font-medium transition-colors ${
-              agreed || isAgreedPersisted
-                ? "bg-orange-600 text-white hover:bg-orange-700"
-                : "bg-gray-300 text-gray-500 cursor-not-allowed"
-            }`}
-          >
-            次へ
-          </button>
-        </div>
-      </div>
       </div>
     </AuthGuard>
   );
