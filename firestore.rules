@@ -40,6 +40,27 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // 個別ユーザー通知（請求書発行通知など）
+    match /userNotifications/{notificationId} {
+      // ユーザー自身の通知のみ読み取り可能
+      allow get: if isAuthenticated() && 
+                      resource.data.userId == request.auth.uid;
+      // list: クエリによる一覧取得（アプリ側でuserIdでフィルタリング）
+      allow list: if isAuthenticated();
+      // ユーザー自身の通知のみ更新可能（既読・アーカイブ）
+      allow update: if isAuthenticated() && 
+                         resource.data.userId == request.auth.uid &&
+                         // 重要なフィールドが変更されていないことを確認
+                         request.resource.data.userId == resource.data.userId &&
+                         request.resource.data.type == resource.data.type &&
+                         request.resource.data.title == resource.data.title &&
+                         request.resource.data.content == resource.data.content &&
+                         request.resource.data.createdAt == resource.data.createdAt &&
+                         request.resource.data.createdBy == resource.data.createdBy;
+      // 作成・削除はAPI route経由のみ（サーバー側で処理）
+      allow create, delete: if false;
+    }
+
     // ブログ投稿（読み取りのみ）
     match /blogPosts/{postId} {
       // 認証済みユーザーで、公開中の投稿のみ読み取り可能
@@ -57,6 +78,7 @@ service cloud.firestore {
     match /users/{userId} {
       // 自分自身のデータ更新を許可
       // 重要なフィールド（id、email、createdAt、userType）は変更不可
+      // contractDataフィールドの更新は許可
       allow update: if isAuthenticated() &&
                          request.auth.uid == userId &&
                          // id、email、createdAt、userType が変更されていないことを確認
@@ -79,7 +101,7 @@ service cloud.firestore {
       match /contractConsents/{consentId} {
         // get: 個別ドキュメントの読み取り
         allow get: if isAuthenticated() && request.auth.uid == userId;
-        // list: クエリによる一覧取得
+        // list: クエリによる一覧取得（orderByを含む）
         allow list: if isAuthenticated() && request.auth.uid == userId;
         // 書き込みはAPI route経由のみ（サーバー側で処理）
         allow write: if false;
@@ -89,7 +111,7 @@ service cloud.firestore {
       match /privacyPolicyConsents/{consentId} {
         // get: 個別ドキュメントの読み取り
         allow get: if isAuthenticated() && request.auth.uid == userId;
-        // list: クエリによる一覧取得
+        // list: クエリによる一覧取得（orderByを含む）
         allow list: if isAuthenticated() && request.auth.uid == userId;
         // 書き込みはAPI route経由のみ（サーバー側で処理）
         allow write: if false;
@@ -99,7 +121,7 @@ service cloud.firestore {
       match /memberSiteTermsConsents/{consentId} {
         // get: 個別ドキュメントの読み取り
         allow get: if isAuthenticated() && request.auth.uid == userId;
-        // list: クエリによる一覧取得
+        // list: クエリによる一覧取得（orderByを含む）
         allow list: if isAuthenticated() && request.auth.uid == userId;
         // 書き込みはAPI route経由のみ（サーバー側で処理）
         allow write: if false;
@@ -109,7 +131,7 @@ service cloud.firestore {
       match /toolTermsConsents/{consentId} {
         // get: 個別ドキュメントの読み取り
         allow get: if isAuthenticated() && request.auth.uid == userId;
-        // list: クエリによる一覧取得
+        // list: クエリによる一覧取得（orderByを含む）
         allow list: if isAuthenticated() && request.auth.uid == userId;
         // 書き込みはAPI route経由のみ（サーバー側で処理）
         allow write: if false;

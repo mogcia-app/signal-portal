@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Signal.Portal",
+  title: "Signal.会員サイト",
   description: "Signal. 会員サイトです",
 };
 
