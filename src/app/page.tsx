@@ -7,8 +7,7 @@ import { checkAllAgreements, getNextAgreementPage } from "@/lib/agreementCheck";
 
 export default function LoginPage() {
   const router = useRouter();
-  const { user, userProfile, login, signup, loading, sendPasswordReset } = useAuth();
-  const [isSignUp, setIsSignUp] = useState(false);
+  const { user, userProfile, login, loading, sendPasswordReset } = useAuth();
   const [showPasswordReset, setShowPasswordReset] = useState(false);
   const [error, setError] = useState<string>("");
   const [successMessage, setSuccessMessage] = useState<string>("");
@@ -18,7 +17,6 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [justLoggedIn, setJustLoggedIn] = useState(false);
   const [formData, setFormData] = useState({
-    name: "",
     email: "",
     password: "",
   });
@@ -71,40 +69,15 @@ export default function LoginPage() {
     setIsLoading(true);
 
     try {
-      if (isSignUp) {
-        // 新規登録
-        if (!formData.email || !formData.password) {
-          setError("メールアドレスとパスワードを入力してください");
-          setIsLoading(false);
-          return;
-        }
-        if (!formData.name) {
-          setError("会社名を入力してください");
-          setIsLoading(false);
-          return;
-        }
-        if (formData.password.length < 8) {
-          setError("パスワードは8文字以上で入力してください");
-          setIsLoading(false);
-          return;
-        }
-        await signup(formData.email, formData.password, {
-          name: formData.name,
-          userType: "toC",
-        });
-        // 新規登録成功後、契約書確認ページへ
-        router.push("/contract-confirmation");
-      } else {
-        // ログイン
-        if (!formData.email || !formData.password) {
-          setError("メールアドレスとパスワードを入力してください");
-          setIsLoading(false);
-          return;
-        }
-        await login(formData.email, formData.password);
-        // ログイン成功フラグを設定（userProfileが更新されたらリダイレクト）
-        setJustLoggedIn(true);
+      // ログイン
+      if (!formData.email || !formData.password) {
+        setError("メールアドレスとパスワードを入力してください");
+        setIsLoading(false);
+        return;
       }
+      await login(formData.email, formData.password);
+      // ログイン成功フラグを設定（userProfileが更新されたらリダイレクト）
+      setJustLoggedIn(true);
     } catch (err: any) {
       console.error("認証エラー:", err);
       // Firebaseエラーの詳細を確認
@@ -115,10 +88,6 @@ export default function LoginPage() {
         setError("ユーザーが見つかりません");
       } else if (errorCode === "auth/wrong-password" || errorCode === "auth/invalid-credential") {
         setError("パスワードが正しくありません");
-      } else if (errorCode === "auth/email-already-in-use") {
-        setError("このメールアドレスは既に使用されています。ログインタブでログインしてください。");
-        // 既に使用されているメールアドレスの場合、ログインモードに切り替える
-        setIsSignUp(false);
       } else if (errorCode === "auth/weak-password") {
         setError("パスワードは6文字以上で入力してください");
       } else if (errorCode === "auth/invalid-email") {
@@ -179,36 +148,12 @@ export default function LoginPage() {
             Signal<span className="text-orange-600">.</span>会員サイト
           </h1>
           <p className="text-gray-600 text-lg">
-            {isSignUp ? "アカウントを作成して始めましょう" : "アカウントにログイン"}
+            アカウントにログイン
           </p>
         </div>
 
         {/* メインカード */}
         <div className="bg-white shadow-2xl p-8 border border-gray-200">
-          {/* タブ切り替え */}
-          <div className="flex gap-2 mb-8 bg-gray-100 p-1">
-            <button
-              onClick={() => setIsSignUp(false)}
-              className={`flex-1 py-3 px-4 font-semibold transition-all duration-300 ${
-                !isSignUp
-                  ? "bg-white text-orange-600 shadow-md transform scale-105"
-                  : "text-gray-600 hover:text-gray-900"
-              }`}
-            >
-              ログイン
-            </button>
-            <button
-              onClick={() => setIsSignUp(true)}
-              className={`flex-1 py-3 px-4 font-semibold transition-all duration-300 ${
-                isSignUp
-                  ? "bg-white text-orange-600 shadow-md transform scale-105"
-                  : "text-gray-600 hover:text-gray-900"
-              }`}
-            >
-              新規登録
-            </button>
-          </div>
-
           <form onSubmit={handleSubmit} className="space-y-6">
             {error && (
               <div className="bg-red-50 border-l-4 border-red-500 text-red-700 px-4 py-3 text-sm flex items-center gap-2 animate-shake">
@@ -216,30 +161,6 @@ export default function LoginPage() {
                   <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
                 </svg>
                 <span>{error}</span>
-              </div>
-            )}
-
-            {isSignUp && (
-              <div className="space-y-2">
-                <label className="block text-sm font-semibold text-gray-700">
-                  会社名 <span className="text-red-500">*</span>
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                    </svg>
-                  </div>
-                  <input
-                    type="text"
-                    value={formData.name}
-                    onChange={(e) => handleInputChange("name", e.target.value)}
-                    className="w-full pl-10 pr-4 py-3 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all duration-200 bg-gray-50 focus:bg-white"
-                    placeholder="株式会社MOGCIA"
-                    autoComplete="organization"
-                    required
-                  />
-                </div>
               </div>
             )}
 
@@ -282,7 +203,7 @@ export default function LoginPage() {
                   onChange={(e) => handleInputChange("password", e.target.value)}
                   className="w-full pl-10 pr-12 py-3 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all duration-200 bg-gray-50 focus:bg-white"
                   placeholder="••••••••"
-                  autoComplete={isSignUp ? "new-password" : "current-password"}
+                  autoComplete="current-password"
                   minLength={8}
                 />
                 <button
@@ -302,24 +223,20 @@ export default function LoginPage() {
                   )}
                 </button>
               </div>
-              {isSignUp && (
-                <p className="text-xs text-gray-500 mt-1">
-                  8文字以上で入力してください
-                </p>
-              )}
+              <p className="text-xs text-gray-500 mt-1">
+                8文字以上で入力してください
+              </p>
             </div>
 
-            {!isSignUp && (
-              <div className="text-right">
-                <button
-                  type="button"
-                  onClick={() => setShowPasswordReset(true)}
-                  className="text-sm text-orange-600 hover:text-orange-700 font-medium transition-colors duration-200"
-                >
-                  パスワードを忘れた場合
-                </button>
-              </div>
-            )}
+            <div className="text-right">
+              <button
+                type="button"
+                onClick={() => setShowPasswordReset(true)}
+                className="text-sm text-orange-600 hover:text-orange-700 font-medium transition-colors duration-200"
+              >
+                パスワードを忘れた場合
+              </button>
+            </div>
 
             <button
               type="submit"
@@ -333,21 +250,10 @@ export default function LoginPage() {
                 </>
               ) : (
                 <>
-                  {isSignUp ? (
-                    <>
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
-                      </svg>
-                      <span>新規登録</span>
-                    </>
-                  ) : (
-                    <>
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
-                      </svg>
-                      <span>ログイン</span>
-                    </>
-                  )}
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
+                  </svg>
+                  <span>ログイン</span>
                 </>
               )}
             </button>
