@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { doc, getDoc, updateDoc, serverTimestamp, collection, query, where, orderBy, limit, getDocs } from "firebase/firestore";
+import { doc, getDoc, collection, query, orderBy, limit, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import AuthGuard from "@/components/AuthGuard";
 import { useAuth } from "@/contexts/AuthContext";
@@ -160,31 +160,43 @@ export default function ContractPage() {
     loadContractData();
   }, [userProfile]);
 
-  // Firestoreに保存する関数
+  // Firestoreに保存する関数（APIルート経由）
+  // ドラフト保存のため、agreedは常にfalseを送る
   const saveToFirestore = useCallback(async () => {
     if (!userProfile?.id || saving) return;
 
     setSaving(true);
     try {
-      const userDocRef = doc(db, "users", userProfile.id);
-      await updateDoc(userDocRef, {
-        contractData: {
-          contractData,
-          paymentMethods,
-          invoicePaymentDate,
-          agreed,
-          agreementItems, // 個別同意項目を保存
-          contractDate,
-          updatedAt: new Date().toISOString(),
+      const response = await fetch("/api/agreements/save", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
         },
-        updatedAt: serverTimestamp(),
+        body: JSON.stringify({
+          type: "contract",
+          agreed: false, // ドラフト保存のため常にfalse
+          userId: userProfile.id,
+          contractData: {
+            contractData: contractData, // companyName等の契約データ
+            paymentMethods: paymentMethods,
+            invoicePaymentDate: invoicePaymentDate,
+            agreementItems: agreementItems,
+            contractDate: contractDate,
+          },
+        }),
       });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "契約データの保存に失敗しました");
+      }
     } catch (error) {
       console.error("Failed to save contract data to Firestore:", error);
+      // ドラフト保存のエラーはユーザーに表示しない（入力中の自動保存のため）
     } finally {
       setSaving(false);
     }
-  }, [userProfile?.id, contractData, paymentMethods, invoicePaymentDate, agreed, agreementItems, contractDate, saving]);
+  }, [userProfile?.id, contractData, paymentMethods, invoicePaymentDate, agreementItems, contractDate, saving]);
 
   // データが変更されたらFirestoreに保存（デバウンス付き）
   useEffect(() => {

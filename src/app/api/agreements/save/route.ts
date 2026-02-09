@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { doc, getDoc, updateDoc, serverTimestamp, collection, addDoc, Timestamp, query, orderBy, limit, getDocs } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { adminDb } from "@/lib/firebase-admin";
+import { FieldValue } from "firebase-admin/firestore";
 import { CONTRACT_VERSION, AGREEMENT_ITEMS, PRIVACY_POLICY_VERSION, MEMBER_SITE_TERMS_VERSION, TOOL_TERMS_VERSION } from "@/lib/contractVersions";
 import { createHash } from "crypto";
 
@@ -28,6 +28,14 @@ interface AgreementData {
       analysisProhibition?: boolean;
       suspension?: boolean;
       confidentialInfo?: boolean;
+    };
+    // 契約データのドラフト保存用（companyName等）
+    contractData?: {
+      companyName?: string;
+      representativeName?: string;
+      email?: string;
+      address?: string;
+      phone?: string;
     };
   };
   // 請求書用の追加データ
@@ -61,17 +69,17 @@ export async function POST(request: NextRequest) {
     const userAgent = request.headers.get("user-agent") || "unknown";
 
     // ユーザードキュメントを取得
-    const userRef = doc(db, "users", userId);
-    const userDoc = await getDoc(userRef);
+    const userRef = adminDb.collection("users").doc(userId);
+    const userDoc = await userRef.get();
 
-    if (!userDoc.exists()) {
+    if (!userDoc.exists) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
     const existingData = userDoc.data();
     const now = new Date();
     const dateString = `${now.getFullYear()}年${String(now.getMonth() + 1).padStart(2, "0")}月${String(now.getDate()).padStart(2, "0")}日`;
-    const timestamp = serverTimestamp();
+    const timestamp = FieldValue.serverTimestamp();
 
     // 既に保存済みの場合、上書きを防ぐ（サーバー側での保護）
     // サブコレクションが存在する場合のみ保存を拒否（新しい構造で保存されている場合）
@@ -92,32 +100,35 @@ export async function POST(request: NextRequest) {
         break;
 
       case "contract":
-        // サブコレクションが存在する場合のみ、保存を拒否
-        try {
-          const contractConsentRef = collection(db, "users", userId, "contractConsents");
-          const contractConsentQuery = query(contractConsentRef, orderBy("agreedAt", "desc"), limit(1));
-          const contractConsentSnapshot = await getDocs(contractConsentQuery);
-          if (!contractConsentSnapshot.empty) {
-            // サブコレクションが存在し、かつagreementItemsがすべてtrueの場合、保存を拒否
-            const latestConsent = contractConsentSnapshot.docs[0].data();
-            if (latestConsent.items) {
-              const allItemsAgreed = Object.values(latestConsent.items).every((item: any) => item?.agreed === true);
-              if (allItemsAgreed) {
-                return NextResponse.json(
-                  { error: "契約書への同意は既に保存済みです。変更できません。" },
-                  { status: 400 }
-                );
+        // 既に同意済みの場合、再度の同意（agreed: true）は拒否
+        // ただし、ドラフト保存（agreed: false）は許可
+        if (agreed) {
+          try {
+            const contractConsentRef = adminDb.collection("users").doc(userId).collection("contractConsents");
+            const contractConsentSnapshot = await contractConsentRef.orderBy("agreedAt", "desc").limit(1).get();
+            if (!contractConsentSnapshot.empty) {
+              // サブコレクションが存在し、かつagreementItemsがすべてtrueの場合、再度の同意を拒否
+              const latestConsent = contractConsentSnapshot.docs[0].data();
+              if (latestConsent.items) {
+                const allItemsAgreed = Object.values(latestConsent.items).every((item: any) => item?.agreed === true);
+                if (allItemsAgreed) {
+                  return NextResponse.json(
+                    { error: "契約書への同意は既に保存済みです。変更できません。" },
+                    { status: 400 }
+                  );
+                }
               }
             }
+          } catch (error) {
+            // エラー時は続行（サブコレクションが存在しない可能性がある）
+            console.error("Failed to check contract consent:", error);
           }
-        } catch (error) {
-          // エラー時は続行（サブコレクションが存在しない可能性がある）
-          console.error("Failed to check contract consent:", error);
         }
+        // agreed: false の場合はドラフト保存として許可
         break;
 
       case "initialInvoice":
-        if (existingData.datesSaved === true) {
+        if (existingData?.datesSaved === true) {
           return NextResponse.json(
             { error: "請求書の日付は既に保存済みです。変更できません。" },
             { status: 400 }
@@ -146,13 +157,13 @@ export async function POST(request: NextRequest) {
       case "privacyPolicy":
         // サブコレクションに同意ログを保存
         if (agreed) {
-          const userEmail = userDoc.data().email || userId;
+          const userEmail = userDoc.data()?.email || userId;
           const policyTextHash = createHash("sha256")
             .update(`${PRIVACY_POLICY_VERSION}-${dateString}`)
             .digest("hex");
           
-          const consentRef = collection(db, "users", userId, "privacyPolicyConsents");
-          const privacyConsentDocRef = await addDoc(consentRef, {
+          const consentRef = adminDb.collection("users").doc(userId).collection("privacyPolicyConsents");
+          const privacyConsentDocRef = await consentRef.add({
             version: PRIVACY_POLICY_VERSION,
             agreed: true,
             agreedAt: timestamp,
@@ -181,13 +192,13 @@ export async function POST(request: NextRequest) {
       case "memberSiteTerms":
         // サブコレクションに同意ログを保存
         if (agreed) {
-          const userEmail = userDoc.data().email || userId;
+          const userEmail = userDoc.data()?.email || userId;
           const termsTextHash = createHash("sha256")
             .update(`${MEMBER_SITE_TERMS_VERSION}-${dateString}`)
             .digest("hex");
           
-          const consentRef = collection(db, "users", userId, "memberSiteTermsConsents");
-          const memberSiteTermsConsentDocRef = await addDoc(consentRef, {
+          const consentRef = adminDb.collection("users").doc(userId).collection("memberSiteTermsConsents");
+          const memberSiteTermsConsentDocRef = await consentRef.add({
             version: MEMBER_SITE_TERMS_VERSION,
             agreed: true,
             agreedAt: timestamp,
@@ -216,13 +227,13 @@ export async function POST(request: NextRequest) {
       case "toolTerms":
         // サブコレクションに同意ログを保存
         if (agreed) {
-          const userEmail = userDoc.data().email || userId;
+          const userEmail = userDoc.data()?.email || userId;
           const toolTermsTextHash = createHash("sha256")
             .update(`${TOOL_TERMS_VERSION}-${dateString}`)
             .digest("hex");
           
-          const consentRef = collection(db, "users", userId, "toolTermsConsents");
-          const toolTermsConsentDocRef = await addDoc(consentRef, {
+          const consentRef = adminDb.collection("users").doc(userId).collection("toolTermsConsents");
+          const toolTermsConsentDocRef = await consentRef.add({
             version: TOOL_TERMS_VERSION,
             agreed: true,
             agreedAt: timestamp,
@@ -250,11 +261,10 @@ export async function POST(request: NextRequest) {
 
       case "contract":
         // contractDataはネストされたオブジェクトなので、既存データを取得してマージ
-        const existingData = userDoc.data();
-        const existingContractData = existingData.contractData || {};
+        const existingContractData = existingData?.contractData || {};
         
         // ユーザー情報を取得
-        const userEmail = existingData.email || userDoc.id;
+        const userEmail = existingData?.email || userDoc.id;
         
         // 契約書本文のハッシュを計算（簡易版：契約バージョンと日付の組み合わせ）
         // 将来的には契約書全文のハッシュを計算する
@@ -268,7 +278,7 @@ export async function POST(request: NextRequest) {
           Object.values(contractData.agreementItems).some((val: any) => val === true);
         
         if (agreed && contractData?.agreementItems) {
-          const consentRef = collection(db, "users", userId, "contractConsents");
+          const consentRef = adminDb.collection("users").doc(userId).collection("contractConsents");
           const consentData: any = {
             contractVersion: CONTRACT_VERSION,
             agreedAt: timestamp,
@@ -325,20 +335,27 @@ export async function POST(request: NextRequest) {
             };
           }
           
-          const consentDocRef = await addDoc(consentRef, consentData);
+          const consentDocRef = await consentRef.add(consentData);
           console.log(`[Contract Consent] Saved to contractConsents/${consentDocRef.id} for user ${userId}`);
         }
         
         // 既存のcontractDataも更新（後方互換性のため）
+        // ドラフト保存（agreed: false）の場合も契約データを保存可能
         updateData.contractData = {
           ...existingContractData,
-          ...(contractData || {}), // リクエストから送られてきた契約データをマージ
-          agreed: agreed,
-          agreedDate: agreed ? dateString : null,
-          agreedAt: agreed ? timestamp : null,
-          agreedIp: agreed ? ipAddress : null,
-          agreedUserAgent: agreed ? userAgent : null,
-          contractVersion: CONTRACT_VERSION, // バージョン情報を追加
+          // 契約データのドラフト（companyName等）を保存（agreedの状態に関わらず）
+          contractData: contractData?.contractData || existingContractData.contractData,
+          // その他の契約データも保存
+          paymentMethods: contractData?.paymentMethods || existingContractData.paymentMethods,
+          invoicePaymentDate: contractData?.invoicePaymentDate || existingContractData.invoicePaymentDate,
+          contractDate: contractData?.contractDate || existingContractData.contractDate,
+          // agreedがtrueの場合のみ同意関連のデータを更新
+          agreed: agreed ? true : (existingContractData.agreed || false),
+          agreedDate: agreed ? dateString : existingContractData.agreedDate,
+          agreedAt: agreed ? timestamp : existingContractData.agreedAt,
+          agreedIp: agreed ? ipAddress : existingContractData.agreedIp,
+          agreedUserAgent: agreed ? userAgent : existingContractData.agreedUserAgent,
+          contractVersion: agreed ? CONTRACT_VERSION : (existingContractData.contractVersion || CONTRACT_VERSION),
           // agreementItemsもトップレベルに保存（確認しやすくするため）
           agreementItems: contractData?.agreementItems || existingContractData.agreementItems,
         };
@@ -347,7 +364,7 @@ export async function POST(request: NextRequest) {
       case "initialInvoice":
         // 請求書の日付データを保存
         const existingInvoiceData = userDoc.data();
-        const existingContractDataForInvoice = existingInvoiceData.contractData || {};
+        const existingContractDataForInvoice = existingInvoiceData?.contractData || {};
         
         updateData.datesSaved = agreed;
         updateData.initialInvoiceAgreedDate = agreed ? dateString : null;
@@ -382,13 +399,13 @@ export async function POST(request: NextRequest) {
     }
 
     // Firestoreに保存
-    await updateDoc(userRef, updateData);
+    await userRef.update(updateData);
     console.log(`[Agreement Save] Successfully saved ${type} agreement for user ${userId}`);
 
     // 同意履歴を別コレクションに保存（監査証跡）
     try {
-      const historyRef = collection(db, "agreementHistory");
-      await addDoc(historyRef, agreementHistory);
+      const historyRef = adminDb.collection("agreementHistory");
+      await historyRef.add(agreementHistory);
     } catch (historyError) {
       console.error("Failed to save agreement history:", historyError);
       // 履歴の保存失敗はエラーにしない（メインの保存は成功しているため）
@@ -406,12 +423,21 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error("Error saving agreement:", error);
+    
+    // より詳細なエラーメッセージを返す
+    let errorMessage = "同意状態の保存に失敗しました";
+    if (error instanceof Error) {
+      errorMessage = error.message;
+      // Firebaseエラーの場合、より詳細な情報を追加
+      if (error.message.includes("Missing or insufficient permissions")) {
+        errorMessage = "Firestore権限エラー: Admin SDKが正しく初期化されていない可能性があります。環境変数 FIREBASE_ADMIN_SERVICE_ACCOUNT_KEY を確認してください。";
+      }
+    }
+    
     return NextResponse.json(
       {
-        error:
-          error instanceof Error
-            ? error.message
-            : "同意状態の保存に失敗しました",
+        error: errorMessage,
+        details: error instanceof Error ? error.stack : undefined,
       },
       { status: 500 }
     );
