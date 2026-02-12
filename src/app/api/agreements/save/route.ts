@@ -45,6 +45,32 @@ interface AgreementData {
   };
 }
 
+function sanitizeFirestoreValue<T>(value: T): T | null {
+  if (value === undefined) {
+    return null;
+  }
+
+  if (Array.isArray(value)) {
+    const sanitizedArray = value
+      .map((item) => sanitizeFirestoreValue(item))
+      .filter((item) => item !== null);
+    return sanitizedArray as T;
+  }
+
+  if (value && typeof value === "object") {
+    const sanitizedObject: Record<string, unknown> = {};
+    for (const [key, nestedValue] of Object.entries(value as Record<string, unknown>)) {
+      const sanitizedNestedValue = sanitizeFirestoreValue(nestedValue);
+      if (sanitizedNestedValue !== null) {
+        sanitizedObject[key] = sanitizedNestedValue;
+      }
+    }
+    return sanitizedObject as T;
+  }
+
+  return value;
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body: AgreementData = await request.json();
@@ -399,7 +425,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Firestoreに保存
-    await userRef.update(updateData);
+    const sanitizedUpdateData = sanitizeFirestoreValue(updateData);
+    await userRef.update(sanitizedUpdateData || {});
     console.log(`[Agreement Save] Successfully saved ${type} agreement for user ${userId}`);
 
     // 同意履歴を別コレクションに保存（監査証跡）
@@ -443,4 +470,3 @@ export async function POST(request: NextRequest) {
     );
   }
 }
-

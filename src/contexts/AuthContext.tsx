@@ -103,18 +103,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             if (!userData.signalToolAccessUrl) {
               const signalToolBaseUrl = process.env.NEXT_PUBLIC_SIGNAL_TOOL_BASE_URL || 'https://signaltool.app';
               const signalToolAccessUrl = `${signalToolBaseUrl}/auth/callback?userId=${firebaseUser.uid}`;
-              
-              try {
-                await setDoc(userDocRef, {
-                  ...userData,
-                  signalToolAccessUrl,
-                  updatedAt: serverTimestamp(),
-                }, { merge: true });
-              } catch (error) {
-                // オフライン時など、setDocが失敗してもプロフィールは設定する
-                console.warn("Failed to update signalToolAccessUrl (possibly offline):", error);
-              }
-              
+
               setUserProfile({
                 ...userData,
                 signalToolAccessUrl,
@@ -338,4 +327,3 @@ export function useAuth() {
   }
   return context;
 }
-

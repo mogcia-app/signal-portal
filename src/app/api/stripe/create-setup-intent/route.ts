@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
-import { doc, getDoc, updateDoc } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { adminDb } from "@/lib/firebase-admin";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "", {
   apiVersion: "2025-12-15.clover",
@@ -26,14 +25,14 @@ export async function POST(request: NextRequest) {
     }
 
     // ユーザー情報を取得
-    const userRef = doc(db, "users", userId);
-    const userDoc = await getDoc(userRef);
+    const userRef = adminDb.collection("users").doc(userId);
+    const userDoc = await userRef.get();
 
-    if (!userDoc.exists()) {
+    if (!userDoc.exists) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    const userData = userDoc.data();
+    const userData = userDoc.data() || {};
 
     // Stripe Customerを作成（まだ存在しない場合）
     let customerId: string;
@@ -50,7 +49,7 @@ export async function POST(request: NextRequest) {
       customerId = customer.id;
 
       // FirestoreにCustomer IDを保存
-      await updateDoc(userRef, {
+      await userRef.update({
         "billingInfo.stripeCustomerId": customerId,
         updatedAt: new Date().toISOString(),
       });
@@ -78,4 +77,3 @@ export async function POST(request: NextRequest) {
     );
   }
 }
-

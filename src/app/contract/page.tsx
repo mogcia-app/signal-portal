@@ -2,11 +2,8 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { doc, getDoc, collection, query, orderBy, limit, getDocs } from "firebase/firestore";
-import { db } from "@/lib/firebase";
 import AuthGuard from "@/components/AuthGuard";
 import { useAuth } from "@/contexts/AuthContext";
-import { AGREEMENT_ITEMS } from "@/lib/contractVersions";
 
 export default function ContractPage() {
   const router = useRouter();
@@ -52,12 +49,13 @@ export default function ContractPage() {
       }
 
       try {
-        const userDocRef = doc(db, "users", userProfile.id);
-        const userDoc = await getDoc(userDocRef);
-
-        if (userDoc.exists()) {
-          const data = userDoc.data();
-          const savedContractData = data.contractData;
+        const response = await fetch(`/api/users/contract-data?userId=${encodeURIComponent(userProfile.id)}`);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch contract data: ${response.status}`);
+        }
+        const result = await response.json();
+        const savedContractData = result?.data?.contractData;
+        const latestConsent = result?.data?.latestConsent;
 
           if (savedContractData) {
             setContractData(savedContractData.contractData || {
@@ -90,40 +88,22 @@ export default function ContractPage() {
             if (savedContractData.contractDate) {
               setContractDate(savedContractData.contractDate);
             }
-            
-            // 最新の同意履歴を読み込み
-            try {
-              const consentRef = collection(db, "users", userProfile.id, "contractConsents");
-              const consentQuery = query(consentRef, orderBy("agreedAt", "desc"), limit(1));
-              const consentSnapshot = await getDocs(consentQuery);
-              if (!consentSnapshot.empty) {
-                const latestConsent = consentSnapshot.docs[0].data();
-                setConsentHistory(latestConsent);
-                // 同意済みの場合は、同意項目も復元
-                if (latestConsent.items) {
-                  const restoredItems = {
-                    fullContract: latestConsent.items.fullContract?.agreed || false,
-                    unpaidTermination: latestConsent.items.unpaidTermination?.agreed || false,
-                    analysisProhibition: latestConsent.items.analysisProhibition?.agreed || false,
-                    suspension: latestConsent.items.suspension?.agreed || false,
-                    confidentialInfo: latestConsent.items.confidentialInfo?.agreed || false,
-                  };
-                  setAgreementItems(restoredItems);
-                  // すべての項目がtrueの場合のみagreedをtrueにする
-                  const allAgreed = Object.values(restoredItems).every(val => val === true);
-                  setAgreed(allAgreed);
-                }
-              } else {
-                // サブコレクションが存在しない場合、agreementItemsがすべてtrueかどうかで判断
-                const savedItems = savedContractData.agreementItems || {};
-                const allItemsAgreed = Object.values(savedItems).length > 0 && 
-                  Object.values(savedItems).every((val: any) => val === true);
-                // 古いデータ（agreementItemsがない、またはすべてfalse）の場合は、agreedをfalseにして再同意を可能にする
-                setAgreed(allItemsAgreed);
+
+            if (latestConsent) {
+              setConsentHistory(latestConsent);
+              if (latestConsent.items) {
+                const restoredItems = {
+                  fullContract: latestConsent.items.fullContract?.agreed || false,
+                  unpaidTermination: latestConsent.items.unpaidTermination?.agreed || false,
+                  analysisProhibition: latestConsent.items.analysisProhibition?.agreed || false,
+                  suspension: latestConsent.items.suspension?.agreed || false,
+                  confidentialInfo: latestConsent.items.confidentialInfo?.agreed || false,
+                };
+                setAgreementItems(restoredItems);
+                const allAgreed = Object.values(restoredItems).every(val => val === true);
+                setAgreed(allAgreed);
               }
-            } catch (error) {
-              console.error("Failed to load consent history:", error);
-              // エラー時も、agreementItemsがすべてtrueかどうかで判断
+            } else {
               const savedItems = savedContractData.agreementItems || {};
               const allItemsAgreed = Object.values(savedItems).length > 0 && 
                 Object.values(savedItems).every((val: any) => val === true);
@@ -139,9 +119,8 @@ export default function ContractPage() {
               phone: userProfile.phone || "",
             });
           }
-        }
       } catch (error) {
-        console.error("Failed to load contract data from Firestore:", error);
+        console.error("Failed to load contract data:", error);
         // エラー時はユーザープロフィールから初期値を設定
         if (userProfile) {
           setContractData({

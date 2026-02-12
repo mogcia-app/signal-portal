@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { collection, addDoc, serverTimestamp, query, where, getDocs, doc, getDoc } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { FieldValue } from "firebase-admin/firestore";
+import { adminDb } from "@/lib/firebase-admin";
 
 const plans: { [key: string]: { name: string; price: number } } = {
   light: { name: "ベーシック", price: 15000 },
@@ -44,11 +44,11 @@ export async function POST(request: NextRequest) {
     
       // 請求日と支払期限を設定
       let invoiceDate = now.toISOString().split('T')[0];
-      const userDocRef = doc(db, "users", userId);
-      const userDoc = await getDoc(userDocRef);
+      const userDocRef = adminDb.collection("users").doc(userId);
+      const userDoc = await userDocRef.get();
       
-      if (userDoc.exists()) {
-        const userData = userDoc.data();
+      if (userDoc.exists) {
+        const userData = userDoc.data() || {};
         const contractDateStr = userData.contractData?.contractDate || "";
         
         // 契約日から日にちを抽出
@@ -95,12 +95,11 @@ export async function POST(request: NextRequest) {
         const billingMonth = `${year}-${String(month + 1).padStart(2, '0')}`;
         
         // 既に存在するかチェック
-        const existingInvoicesQuery = query(
-          collection(db, "invoices"),
-          where("userId", "==", userId),
-          where("billingMonth", "==", billingMonth)
-        );
-        const existingInvoices = await getDocs(existingInvoicesQuery);
+        const existingInvoices = await adminDb
+          .collection("invoices")
+          .where("userId", "==", userId)
+          .where("billingMonth", "==", billingMonth)
+          .get();
         
         if (!existingInvoices.empty) {
           return NextResponse.json(
@@ -110,7 +109,7 @@ export async function POST(request: NextRequest) {
         }
         
         // Firestoreに請求書を保存
-        const invoiceRef = collection(db, "invoices");
+        const invoiceRef = adminDb.collection("invoices");
         const newInvoice = {
           userId,
           invoiceNumber,
@@ -123,13 +122,13 @@ export async function POST(request: NextRequest) {
           total,
           status: 'pending' as const,
           billingMonth, // 重複防止用
-          createdAt: serverTimestamp(),
+          createdAt: FieldValue.serverTimestamp(),
         };
 
-        const docRef = await addDoc(invoiceRef, newInvoice);
+        const docRef = await invoiceRef.add(newInvoice);
         
         // 通知を作成
-        await addDoc(collection(db, "notifications"), {
+        await adminDb.collection("notifications").add({
           title: "請求書が発行されました",
           content: `請求書番号: ${invoiceNumber}\n請求金額: ¥${total.toLocaleString()}\n支払期限: ${dueDate}\n\n請求書ページから詳細を確認できます。`,
           type: "info",
@@ -139,9 +138,9 @@ export async function POST(request: NextRequest) {
           isSticky: true,
           tags: ["請求書"],
           createdBy: "system",
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-          publishedAt: serverTimestamp(),
+          createdAt: FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp(),
+          publishedAt: FieldValue.serverTimestamp(),
           readCount: 0,
           clickCount: 0,
         });
@@ -164,12 +163,11 @@ export async function POST(request: NextRequest) {
       const defaultDueDate = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
       // 既に存在するかチェック
-      const defaultExistingInvoicesQuery = query(
-        collection(db, "invoices"),
-        where("userId", "==", userId),
-        where("billingMonth", "==", defaultBillingMonth)
-      );
-      const defaultExistingInvoices = await getDocs(defaultExistingInvoicesQuery);
+      const defaultExistingInvoices = await adminDb
+        .collection("invoices")
+        .where("userId", "==", userId)
+        .where("billingMonth", "==", defaultBillingMonth)
+        .get();
       
       if (!defaultExistingInvoices.empty) {
         return NextResponse.json(
@@ -179,7 +177,7 @@ export async function POST(request: NextRequest) {
       }
     
       // Firestoreに請求書を保存
-      const invoiceRef = collection(db, "invoices");
+      const invoiceRef = adminDb.collection("invoices");
       const newInvoice = {
         userId,
         invoiceNumber,
@@ -192,13 +190,13 @@ export async function POST(request: NextRequest) {
         total,
         status: 'pending' as const,
         billingMonth: defaultBillingMonth, // 重複防止用
-        createdAt: serverTimestamp(),
+        createdAt: FieldValue.serverTimestamp(),
       };
 
-      const docRef = await addDoc(invoiceRef, newInvoice);
+      const docRef = await invoiceRef.add(newInvoice);
       
       // 通知を作成
-      await addDoc(collection(db, "notifications"), {
+      await adminDb.collection("notifications").add({
         title: "請求書が発行されました",
         content: `請求書番号: ${invoiceNumber}\n請求金額: ¥${total.toLocaleString()}\n支払期限: ${defaultDueDate}\n\n請求書ページから詳細を確認できます。`,
         type: "info",
@@ -208,9 +206,9 @@ export async function POST(request: NextRequest) {
         isSticky: true,
         tags: ["請求書"],
         createdBy: "system",
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-        publishedAt: serverTimestamp(),
+        createdAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+        publishedAt: FieldValue.serverTimestamp(),
         readCount: 0,
         clickCount: 0,
       });
@@ -235,4 +233,3 @@ export async function POST(request: NextRequest) {
     );
   }
 }
-
