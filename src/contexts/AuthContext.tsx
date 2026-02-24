@@ -10,6 +10,7 @@ import {
   sendPasswordResetEmail,
 } from "firebase/auth";
 import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
+import { buildSignalToolAccessUrl, isValidSignalToolAccessUrl } from "@/lib/signalToolAccess";
 import { auth, db } from "@/lib/firebase";
 import { UserProfile } from "@/types/user";
 
@@ -98,21 +99,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
           if (userDoc.exists()) {
             const userData = userDoc.data() as UserProfile;
-            
-            // signalToolAccessUrlが存在しない場合は生成して保存
-            if (!userData.signalToolAccessUrl) {
-              const signalToolBaseUrl = process.env.NEXT_PUBLIC_SIGNAL_TOOL_BASE_URL || 'https://signaltool.app';
-              const signalToolAccessUrl = `${signalToolBaseUrl}/auth/callback?userId=${firebaseUser.uid}`;
+            const canonicalSignalToolAccessUrl = buildSignalToolAccessUrl(firebaseUser.uid);
+            const hasValidSignalToolAccessUrl = isValidSignalToolAccessUrl(
+              userData.signalToolAccessUrl,
+              firebaseUser.uid
+            );
 
-              setUserProfile({
-                ...userData,
-                signalToolAccessUrl,
-              } as UserProfile);
-            } else {
-              setUserProfile({
-                id: userDoc.id,
-                ...userData,
-              } as UserProfile);
+            setUserProfile({
+              id: userDoc.id,
+              ...userData,
+              signalToolAccessUrl: hasValidSignalToolAccessUrl
+                ? userData.signalToolAccessUrl
+                : canonicalSignalToolAccessUrl,
+            } as UserProfile);
+
+            // 古い/不正なURLが残っているユーザーをログイン時に自動修正
+            if (!hasValidSignalToolAccessUrl) {
+              try {
+                await setDoc(
+                  userDocRef,
+                  {
+                    signalToolAccessUrl: canonicalSignalToolAccessUrl,
+                    updatedAt: serverTimestamp(),
+                  },
+                  { merge: true }
+                );
+              } catch (error) {
+                console.warn("Failed to repair signalToolAccessUrl:", error);
+              }
             }
           } else {
             // プロフィールが存在しない場合は作成
@@ -176,7 +190,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         signOut(auth);
         clearSessionStartTime();
         if (typeof window !== "undefined") {
-          window.location.href = "/login";
+          window.location.href = "/";
         }
       }
     }, 60000); // 1分ごとにチェック
@@ -210,8 +224,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const uid = userCredential.user.uid;
 
     // Signal.ツールへのアクセスURLを生成
-    const signalToolBaseUrl = process.env.NEXT_PUBLIC_SIGNAL_TOOL_BASE_URL || 'https://signaltool.app';
-    const signalToolAccessUrl = `${signalToolBaseUrl}/auth/callback?userId=${uid}`;
+    const signalToolAccessUrl = buildSignalToolAccessUrl(uid);
 
     // Firestoreにユーザープロフィールを保存
     const userDocRef = doc(db, "users", uid);
@@ -294,8 +307,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const sendPasswordReset = async (email: string) => {
     const redirectUrl = typeof window !== "undefined" 
-      ? `${window.location.origin}/login`
-      : "/login";
+      ? `${window.location.origin}/`
+      : "/";
     await sendPasswordResetEmail(auth, email, {
       url: redirectUrl,
       handleCodeInApp: false,

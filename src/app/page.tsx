@@ -21,7 +21,7 @@ export default function LoginPage() {
     password: "",
   });
 
-  // ログイン済みでも/loginページにはアクセス可能（リダイレクトしない）
+  // ログイン画面は/に統一（自動リダイレクトは行わない）
 
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));

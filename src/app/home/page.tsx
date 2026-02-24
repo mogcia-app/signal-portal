@@ -10,6 +10,7 @@ import AuthGuard from "@/components/AuthGuard";
 import { useAuth } from "@/contexts/AuthContext";
 import { UserProfile } from "@/types/user";
 import { NotificationBanner } from "@/components/notifications/NotificationBanner";
+import { buildSignalToolAccessUrl } from "@/lib/signalToolAccess";
 
 export default function Home() {
   const router = useRouter();
@@ -65,16 +66,11 @@ export default function Home() {
     return () => unsubscribe();
   }, [user, router, pathname]);
 
-  // Signal.ツールへのアクセスURLを取得（userProfileから取得、なければ動的に生成）
+  // Signal.ツールへのアクセスURLを取得（常に正規URLを生成）
   const getSignalToolAccessUrl = () => {
-    if (userProfile?.signalToolAccessUrl) {
-      return userProfile.signalToolAccessUrl;
-    }
-    // signalToolAccessUrlが存在しない場合は動的に生成
-    if (userProfile?.id || user?.uid) {
-      const userId = userProfile?.id || user?.uid;
-      const signalToolBaseUrl = process.env.NEXT_PUBLIC_SIGNAL_TOOL_BASE_URL || 'https://signaltool.app';
-      return `${signalToolBaseUrl}/auth/callback?userId=${userId}`;
+    const userId = userProfile?.id || user?.uid;
+    if (userId) {
+      return buildSignalToolAccessUrl(userId);
     }
     return null;
   };
@@ -444,4 +440,3 @@ export default function Home() {
     </AuthGuard>
   );
 }
-
